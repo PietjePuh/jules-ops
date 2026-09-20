@@ -16,7 +16,7 @@ coding agent, from the nova host. Secrets are resolved at run time from
 | `notify.sh` | Shared Slack notifier, sourced by the cron jobs |
 | `jules-unblock.sh` | Manual nudge for specific session ids |
 | `jules-heartbeat.sh` | Weekly proof of life, so silence means idle and not dead |
-| `jules-prs.sh` | Counts open Jules PRs and marks drafts ready for review |
+| `jules-prs.sh` | Counts, groups, readies and closes open Jules PRs |
 | `jules-rotate.sh` | Nightly: starts one session on the next repo, rotating personas |
 | `repos.priority` | Rotation order for scheduled work, highest value first |
 | `repos.allow` | Fail-closed allowlist of repos a session may be created against |
@@ -97,3 +97,31 @@ notifier itself would otherwise be silent.
   duplicate PRs by heuristic was tried in PietjePuh/Toolbelt's `dedupe-prs.yml`
   and rolled back — overlap on a shared file is too weak a signal and it closed
   legitimate work.
+- `jules-prs.sh close` is dry-run unless `--confirm`. It comments the reason on
+  the pull request before closing it, so the decision is auditable and the close
+  is reopenable. `--superseded` keeps the highest-numbered PR per normalised
+  title and closes the rest; that is a far stronger signal than the file-overlap
+  heuristic Toolbelt rolled back, because the titles are byte-identical.
+  `--conflicted` closes only PRs whose `mergeable_state` is `dirty` and which are
+  older than `--age-days`.
+
+## Force-pushing a Jules branch
+
+A Jules session pins the commit it started from and never rebases. If it writes
+again after you force-push, it re-applies its diff from that pinned base and
+silently reverts everything merged since. `COMPLETED` does not mean the session
+is finished with the branch — check the session's update time, not its state.
+Two documented incidents of exactly this are written up in
+Avicennasis/jules-mcp's README (`GrantLoft#361`, `rDNSFix#88`), where a squash
+merge reverted six already-merged PRs.
+
+The REST API has no archive endpoint — `sessions` supports create, list, get,
+delete, sendMessage and approvePlan only — so the only way to guarantee a
+session cannot write again is `jules.sh rm <id>`. Procedure:
+
+1. Find the session for that branch and delete it.
+2. Force-push the rework.
+3. Re-read the PR head and confirm it is still your commit before merging.
+
+The structurally safer alternative is to open a fresh PR from a branch Jules has
+no session for, and close theirs.
