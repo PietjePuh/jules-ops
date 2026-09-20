@@ -25,6 +25,11 @@ finish with one report.
 entries, the four job logs, escalated sessions, sessions by state, unfinished
 sessions, the open-PR backlog per repo and the rotation position.
 
+**1b. Alerts.** The "alerts since last run" section of the snapshot is what
+would have gone to Slack: escalations, held sessions, job failures. Treat it as
+the inbox for this run. After reporting, clear it with
+`: > /var/lib/nova-mcp/work/jules-ops/notify.log` so the next run starts empty.
+
 **2. Job health.** From the logs, state what ran overnight and what did not. A
 job whose log has no entry from the last 24 hours has not run — say so plainly
 rather than assuming it was quiet. Report any `FAILED` line verbatim.

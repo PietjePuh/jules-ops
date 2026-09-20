@@ -4,3 +4,4 @@ stalled-seen.json
 triage-*.md
 rotate-cursor
 cron.log
+notify.log

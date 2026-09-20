@@ -17,6 +17,7 @@ sec "cron.log"        ; tail_or "${DIR}/cron.log" 12
 sec "rotation"        ; tail_or "${DIR}/jules-rotate.log" 5
 sec "stalled sweep"   ; tail_or "${DIR}/jules-stalled.log" 12
 sec "release watch"   ; tail_or "${DIR}/jules-watch.log" 5
+sec "alerts since last run"; tail_or "${DIR}/notify.log" 30
 
 sec "escalated, awaiting a human answer"
 if [ -s "${DIR}/stalled-seen.json" ]; then

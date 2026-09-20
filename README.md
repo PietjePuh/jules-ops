@@ -141,3 +141,7 @@ no session for, and close theirs.
   answering it produces another pull request into a repo that cannot absorb one.
   The session's repo is cached in the state file so the backlog is not
   re-resolved on every run.
+- `JULES_NOTIFY` selects the channel: `log` (default) appends alerts to
+  `notify.log`, `slack` posts through the webhook, `off` discards them. The
+  scheduled task is the notification channel, so alerts are written where it
+  reads them; `jules-status.sh` surfaces `notify.log` and the run clears it.
