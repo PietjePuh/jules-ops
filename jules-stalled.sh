@@ -19,7 +19,7 @@ DIR="${JULES_OPS_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 # shellcheck source=/dev/null
 . "${DIR}/notify.sh"
 
-HOURS="${JULES_STALL_HOURS:-4}"
+HOURS="${JULES_STALL_HOURS:-1}"
 SEEN="${JULES_STALL_SEEN:-${DIR}/stalled-seen.json}"
 LOG="${DIR}/jules-stalled.log"
 MAX_ATTEMPTS=2
