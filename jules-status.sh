@@ -28,7 +28,7 @@ else
 fi
 
 sec "sessions by state"
-sessions="$("${DIR}/jules.sh" ls 100)"
+sessions="$("${DIR}/jules.sh" ls 500)"
 cut -f2 <<<"$sessions" | sort | uniq -c | sort -rn | awk '{printf "  %s %s\n",$1,$2}'
 
 sec "sessions not finished"

@@ -67,9 +67,22 @@ case "$cmd" in
                       .name] | @tsv'
     ;;
   ls)
-    api GET "/sessions?pageSize=${1:-20}" | jq -r \
-      '.sessions[]? | [.id, .state, .updateTime,
-                        ((.title // "-") | gsub("\\s+"; " ") | .[0:64])] | @tsv'
+    # The API caps a page at 100 and there are hundreds of sessions, so a single
+    # request silently hides everything older. Page until exhausted: a stalled
+    # session on page 3 is still a stalled session.
+    want="${1:-20}"; got=0; token=""; pages=0
+    while :; do
+      page="$(api GET "/sessions?pageSize=100${token:+&pageToken=${token}}")"
+      jq -r '.sessions[]? | [.id, .state, .updateTime,
+                             ((.title // "-") | gsub("\\s+"; " ") | .[0:64])] | @tsv' \
+        <<<"$page"
+      n="$(jq -r '.sessions | length' <<<"$page")"
+      got=$((got + n)); pages=$((pages + 1))
+      token="$(jq -r '.nextPageToken // empty' <<<"$page")"
+      [ -n "$token" ] || break
+      [ "$got" -lt "$want" ] || break
+      [ "$pages" -lt "${JULES_MAX_PAGES:-20}" ] || break
+    done | head -n "$want"
     ;;
   get)
     [ $# -ge 1 ] || { echo "jules: get <sessionId>" >&2; exit 2; }

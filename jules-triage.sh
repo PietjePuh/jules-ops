@@ -10,7 +10,7 @@ OUT="${JULES_TRIAGE_OUT:-${DIR}/triage-$(date -u '+%Y%m%d').md}"
 STALL_STATES='AWAITING_USER_FEEDBACK AWAITING_PLAN_APPROVAL FAILED'
 
 cutoff="$(date -u -d "-${HOURS} hours" '+%Y-%m-%dT%H:%M:%SZ')"
-sessions="$("${DIR}/jules.sh" ls 100)"
+sessions="$("${DIR}/jules.sh" ls 500)"
 
 {
   printf '# Jules triage — %s\n\n' "$(date -u '+%d/%m/%Y %H:%M:%S UTC')"

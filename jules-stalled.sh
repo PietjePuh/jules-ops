@@ -32,7 +32,7 @@ if [ -n "${JULES_SESSIONS_SRC:-}" ]; then
   sessions="$(cat "${JULES_SESSIONS_SRC}")"
 else
   err="$(mktemp)"
-  if ! sessions="$("${DIR}/jules.sh" ls 100 2>"$err")"; then
+  if ! sessions="$("${DIR}/jules.sh" ls 500 2>"$err")"; then
     msg="$(cat "$err")"; rm -f "$err"
     printf '[%s] FAILED to list sessions\n%s\n' "$stamp" "$msg" >>"$LOG"
     notify ":rotating_light: jules-stalled could not list sessions on nova (${stamp})

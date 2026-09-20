@@ -129,3 +129,10 @@ no session for, and close theirs.
   and workflows do not run. `AI`, `Main` and `ract` were archived and have been
   dropped from `repos.priority` and `repos.allow`. Unarchive them on GitHub
   before adding them back.
+- The sessions endpoint caps a page at 100 and the account holds several hundred
+  sessions, so a single request silently hides the rest. `jules.sh ls` pages
+  until it has what was asked for; every caller now asks for 500. Before this
+  fix the sweep, the triage and rotation's busy check were blind to 42 stalled
+  sessions sitting past the first page.
+- There is no archive endpoint. Sessions accumulate indefinitely and the only
+  way to remove one is `jules.sh rm`.

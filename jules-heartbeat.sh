@@ -7,7 +7,7 @@ DIR="/var/lib/nova-mcp/work/jules-ops"
 . "${DIR}/notify.sh"
 
 stamp="$(date -u '+%d/%m/%Y %H:%M:%S UTC')"
-sessions="$("${DIR}/jules.sh" ls 100)"
+sessions="$("${DIR}/jules.sh" ls 500)"
 states="$(cut -f2 <<<"$sessions" | sort | uniq -c | sort -rn | awk '{printf "  %s %s\n", $1, $2}')"
 cursor="$(cat "${DIR}/rotate-cursor" 2>/dev/null || echo 0)"
 last_rotate="$(tail -1 "${DIR}/jules-rotate.log" 2>/dev/null || echo 'no rotation yet')"

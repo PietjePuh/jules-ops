@@ -19,7 +19,7 @@ mapfile -t REPOS < <(grep -vE '^\s*(#|$)' "${DIR}/repos.priority")
 [ "${#REPOS[@]}" -gt 0 ] || { echo "jules-rotate: repos.priority is empty" >&2; exit 2; }
 
 i="$(cat "$CURSOR" 2>/dev/null || echo 0)"
-sessions="$("${DIR}/jules.sh" ls 100)"
+sessions="$("${DIR}/jules.sh" ls 500)"
 
 # Repos that already have a live or stalled session — never stack a second one.
 busy_repos="$(while IFS=$'\t' read -r id state _ _; do
