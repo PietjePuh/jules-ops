@@ -46,10 +46,10 @@ through the real notification path.
 ## Schedule
 
 ```
-0 4   * * * /var/lib/nova-mcp/work/jules-ops/jules-watch-cron.sh >/dev/null 2>&1
-0 */3 * * * /var/lib/nova-mcp/work/jules-ops/jules-stalled.sh    >/dev/null 2>&1
-30 4  * * * /var/lib/nova-mcp/work/jules-ops/jules-triage.sh     >/dev/null 2>&1
-0 23  * * * /var/lib/nova-mcp/work/jules-ops/jules-rotate.sh     >/dev/null 2>&1
+
+
+
+
 ```
 
 ## Notes
