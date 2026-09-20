@@ -12,7 +12,9 @@ coding agent, from the nova host. Secrets are resolved at run time from
 | `jules-watch.sh` | Snapshot + diff of the public Jules release surface (GitHub, npm) |
 | `jules-watch-cron.sh` | Unattended runner for `jules-watch.sh`, notifies on change or failure |
 | `jules-stalled.sh` | Alerts on sessions waiting on a human, or failed, beyond a threshold |
+| `jules-triage.sh` | Read-only report of every stalled session and its last message |
 | `notify.sh` | Shared Slack notifier, sourced by the cron jobs |
+| `repos.priority` | Rotation order for scheduled work, highest value first |
 
 ## Secrets
 
@@ -43,6 +45,7 @@ through the real notification path.
 ```
 0 4   * * * /var/lib/nova-mcp/work/jules-ops/jules-watch-cron.sh >/dev/null 2>&1
 0 */3 * * * /var/lib/nova-mcp/work/jules-ops/jules-stalled.sh    >/dev/null 2>&1
+30 4  * * * /var/lib/nova-mcp/work/jules-ops/jules-triage.sh     >/dev/null 2>&1
 ```
 
 ## Notes
@@ -53,5 +56,8 @@ through the real notification path.
 - The Jules product changelog is not covered by `jules-watch.sh`: `jules.google`
   serves a challenge page to plain HTTP clients and publishes no feed or sitemap,
   so it only renders through headless Chromium.
-- Local state (`state.json`, `stalled-seen.json`) and logs are deliberately not
-  tracked; they expire and are rebuilt on the next run.
+- Local state (`state.json`, `stalled-seen.json`), logs and triage reports are
+  deliberately not tracked; they expire and are rebuilt on the next run.
+- The Jules REST API exposes sessions, activities and sources only. Scheduled
+  tasks are a web-UI feature with no API surface, so recurring work that must be
+  version-controlled has to be driven from cron here via `jules.sh new`.
