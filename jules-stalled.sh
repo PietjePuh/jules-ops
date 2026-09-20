@@ -53,8 +53,24 @@ act() { # act <verb> <id> ; verb = approve | unblock
   esac
 }
 
+# Rotation refuses to start work on a repo that already has a pile of open PRs.
+# Answering a stalled session produces a PR too, so the same limit applies here —
+# otherwise the sweep quietly undoes the backpressure rotation enforces.
+MAX_OPEN_PRS="${JULES_MAX_OPEN_PRS:-3}"
+over_limit="$("${DIR}/jules-prs.sh" list 2>/dev/null \
+  | awk -v m="$MAX_OPEN_PRS" '{n=$2; sub(/^open=/,"",n); if (n+0 >= m) print $1}')"
+
+# repo for a session, cached in the state file so a backlog is not re-fetched
+session_repo() {
+  local id="$1" cached
+  cached="$(jq -r --arg i "$id" '.[$i].repo // empty' <<<"$prev_json")"
+  if [ -n "$cached" ]; then printf '%s' "$cached"; return 0; fi
+  "${DIR}/jules.sh" get "$id" | jq -r '.sourceContext.source // empty' | sed 's#.*/##'
+}
+
 prev_json="$(cat "$SEEN" 2>/dev/null || echo '{}')"
 next_json='{}'
+held=''
 acted='' ; escalated='' ; failed='' ; n_acted=0
 
 while IFS=$'\t' read -r id state updated title; do
@@ -82,6 +98,14 @@ while IFS=$'\t' read -r id state updated title; do
     continue
   fi
 
+  repo="$(session_repo "$id")"
+  if [ -n "${repo:-}" ] && grep -qxF "$repo" <<<"$over_limit"; then
+    held+="  ${repo}  ${id}  ${title}"$'\n'
+    next_json="$(jq -c --arg i "$id" --arg u "$updated" --arg r "$repo" --argjson a "$attempts" \
+      '.[$i] = {updated: $u, attempts: $a, repo: $r, held: true}' <<<"$next_json")"
+    continue
+  fi
+
   verb=unblock
   [ "$state" != AWAITING_PLAN_APPROVAL ] || verb=approve
   if act "$verb" "$id"; then
@@ -90,13 +114,13 @@ while IFS=$'\t' read -r id state updated title; do
   else
     escalated+="  ${state} (${verb} failed)  ${id}  ${title}"$'\n'
   fi
-  next_json="$(jq -c --arg i "$id" --arg u "$updated" --argjson a "$attempts" \
-    '.[$i] = {updated: $u, attempts: $a}' <<<"$next_json")"
+  next_json="$(jq -c --arg i "$id" --arg u "$updated" --arg r "${repo:-}" --argjson a "$attempts" \
+    '.[$i] = {updated: $u, attempts: $a, repo: $r}' <<<"$next_json")"
 done <<<"$sessions"
 
 printf '%s\n' "$next_json" >"$SEEN"
 
-[ -n "${acted}${escalated}${failed}" ] || {
+[ -n "${acted}${escalated}${failed}${held}" ] || {
   printf '[%s] nothing stalled beyond %sh\n' "$stamp" "$HOURS" >>"$LOG"
   exit 0
 }
@@ -106,6 +130,7 @@ body=''
 [ "$n_acted" -le 10 ] || body+="  ... and $((n_acted - 10)) more"$'\n'
 [ -z "$escalated" ] || body+=":raised_hand: needs you, ${MAX_ATTEMPTS} attempts spent:"$'\n'"${escalated}"
 [ -z "$failed" ]    || body+=":x: failed sessions:"$'\n'"${failed}"
+[ -z "$held" ]      || body+=":pause_button: held, repo already over ${MAX_OPEN_PRS} open PRs:"$'\n'"$(head -10 <<<"$held")"
 
 printf '[%s]\n%s' "$stamp" "$body" >>"$LOG"
 notify ":hourglass_flowing_sand: Jules stalled-session sweep (${stamp}):

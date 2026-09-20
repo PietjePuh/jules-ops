@@ -29,13 +29,23 @@ sessions, the open-PR backlog per repo and the rotation position.
 job whose log has no entry from the last 24 hours has not run — say so plainly
 rather than assuming it was quiet. Report any `FAILED` line verbatim.
 
-**3. Escalations.** For each session under "escalated, awaiting a human answer",
-run `./jules.sh activities <id>` and read the agent's last message. If the
-decision is clear from the repository's own conventions, answer it with
-`./jules.sh msg <id> "<specific instruction>"` — an actual decision, never the
-generic nudge the automatic sweep already spent its two attempts on. If it
-genuinely needs Tim, leave the session alone and list it with a one-line summary
-of what it is asking.
+**3. Answer Jules.** Two categories come out of the sweep and both are yours.
+
+*Escalated* — the automatic sweep spent its two attempts and got nowhere. Run
+`./jules.sh activities <id>`, read the agent's last message, and answer it with
+`./jules.sh msg <id> "<specific instruction>"`. A real decision: which of the
+candidates to implement, which file, which convention to follow. Never the
+generic nudge the sweep already tried.
+
+*Held* — the session is waiting but its repo is already over the open-PR limit,
+so the sweep deliberately did not nudge it. Do not tell these to go and build
+something; that is how the backlog got here. Instead check the repo's open PRs
+and, where an open PR already covers the work, reply telling the session exactly
+that and to stop without opening a pull request. Draining a held session should
+remove work, not add it. If the work is genuinely not covered, leave it held and
+say so.
+
+Leave anything you cannot decide without Tim, and list what it is asking.
 
 **4. Pull requests.** For any repo over the open-PR limit, list its open Jules
 PRs with the github connector and group them: near-identical to each other, or

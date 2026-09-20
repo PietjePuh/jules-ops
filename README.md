@@ -136,3 +136,8 @@ no session for, and close theirs.
   sessions sitting past the first page.
 - There is no archive endpoint. Sessions accumulate indefinitely and the only
   way to remove one is `jules.sh rm`.
+- The sweep honours the same open-PR limit as rotation. A stalled session whose
+  repo is already over the limit is reported as held rather than nudged, because
+  answering it produces another pull request into a repo that cannot absorb one.
+  The session's repo is cached in the state file so the backlog is not
+  re-resolved on every run.
