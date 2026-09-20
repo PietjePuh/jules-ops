@@ -3,7 +3,6 @@
 # Edit freely — this file is the list, nothing infers priority elsewhere.
 
 # Tier 1 — canon and the things everything else depends on
-AI
 nova-mcp
 Toolbelt
 
@@ -14,10 +13,8 @@ TI
 N8n
 
 # Tier 3 — active products
-Main
 brain
 poncraft
-ract
 toolbelt-mobile
 
 # Tier 4 — supporting

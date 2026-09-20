@@ -3,17 +3,15 @@
 # here, and refuses entirely if this file is missing. Owner is implied.
 # Deliberately excluded: 1password-toolkit, fleet-topology, docker-configs,
 # and any repo where an unreviewed agent commit is expensive to unwind.
+# Removed 20/09/2026 as archived and therefore read-only: AI, Main, ract.
 
-AI
 nova-mcp
 Toolbelt
 N8N---SOC-Workflows
 zero-trust
 TI
 N8n
-Main
 brain
 poncraft
-ract
 toolbelt-mobile
 BackgroundRemoval

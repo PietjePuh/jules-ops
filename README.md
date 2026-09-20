@@ -125,3 +125,7 @@ session cannot write again is `jules.sh rm <id>`. Procedure:
 
 The structurally safer alternative is to open a fresh PR from a branch Jules has
 no session for, and close theirs.
+- An archived repository is read-only: pull requests cannot be closed or merged
+  and workflows do not run. `AI`, `Main` and `ract` were archived and have been
+  dropped from `repos.priority` and `repos.allow`. Unarchive them on GitHub
+  before adding them back.

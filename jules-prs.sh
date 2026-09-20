@@ -38,11 +38,18 @@ norm_title() {
     | tr '[:upper:]' '[:lower:]' | tr -s ' ' | sed -E 's/^ +| +$//g'
 }
 
-close_pr() { # close_pr <repo> <number> <reason>
+close_pr() { # close_pr <repo> <number> <reason> -> non-zero and a message on failure
+  local resp state
   api -X POST "https://api.github.com/repos/${OWNER}/$1/issues/$2/comments" \
       -d "$(jq -nc --arg b "Closed by jules-prs.sh: $3" '{body: $b}')" >/dev/null
-  api -X PATCH "https://api.github.com/repos/${OWNER}/$1/pulls/$2" \
-      -d '{"state":"closed"}' >/dev/null
+  resp="$(api -X PATCH "https://api.github.com/repos/${OWNER}/$1/pulls/$2" \
+          -d '{"state":"closed"}')"
+  state="$(jq -r '.state // empty' <<<"$resp")"
+  if [ "$state" != closed ]; then
+    printf 'close failed %s#%s: %s\n' "$1" "$2" \
+      "$(jq -rc '{message, errors}' <<<"$resp" 2>/dev/null || printf '%.200s' "$resp")" >&2
+    return 1
+  fi
 }
 
 cmd="${1:-list}"; shift || true
@@ -119,7 +126,7 @@ case "$cmd" in
     if [ "$mode" = numbers ]; then
       for n in ${numbers//,/ }; do
         if [ "$confirm" -eq 1 ]; then
-          close_pr "$repo" "$n" "closed on request"; echo "closed ${repo}#${n}"
+          close_pr "$repo" "$n" "closed on request" && echo "closed ${repo}#${n}"
         else
           echo "would close ${repo}#${n}"
         fi
@@ -155,8 +162,9 @@ for key, items in groups.items():
       while IFS=$'\t' read -r n t; do
         [ -n "${n:-}" ] || continue
         if [ "$confirm" -eq 1 ]; then
-          close_pr "$repo" "$n" "superseded by a newer pull request with the same title"
-          echo "closed ${repo}#${n}  ${t}"
+          if close_pr "$repo" "$n" "superseded by a newer pull request with the same title"; then
+            echo "closed ${repo}#${n}  ${t}"
+          fi
         else
           echo "would close ${repo}#${n}  ${t}"
         fi
@@ -169,8 +177,9 @@ for key, items in groups.items():
         [ "$st" = dirty ] || continue
         [[ "$created" < "$cutoff" ]] || continue
         if [ "$confirm" -eq 1 ]; then
-          close_pr "$repo" "$n" "unmergeable conflicts and older than ${age_days} days"
-          echo "closed ${repo}#${n}  conflicts, created ${created:0:10}"
+          if close_pr "$repo" "$n" "unmergeable conflicts and older than ${age_days} days"; then
+            echo "closed ${repo}#${n}  conflicts, created ${created:0:10}"
+          fi
         else
           echo "would close ${repo}#${n}  conflicts, created ${created:0:10}"
         fi
