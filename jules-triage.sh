@@ -29,7 +29,7 @@ while IFS=$'\t' read -r id state updated title; do
                 // .userMessaged.userMessage
                 // .planGenerated.plan
                 // (. | tostring))' \
-    | tr '\n' ' ' | cut -c1-600)"
+    | tr '\n' ' ' | tr -d '\000-\010\013\014\016-\037\177' | cut -c1-600)"
   {
     printf '\n## %s. %s — %s\n\n' "$n" "$state" "$title"
     printf -- '- id: `%s`\n- idle since: %s\n- last activity: %s\n' "$id" "$updated" "$last"

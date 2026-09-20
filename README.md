@@ -18,6 +18,7 @@ coding agent, from the nova host. Secrets are resolved at run time from
 | `jules-heartbeat.sh` | Weekly proof of life, so silence means idle and not dead |
 | `jules-rotate.sh` | Nightly: starts one session on the next repo, rotating personas |
 | `repos.priority` | Rotation order for scheduled work, highest value first |
+| `repos.allow` | Fail-closed allowlist of repos a session may be created against |
 | `prompts/` | Persona prompts: sentinel, palette, bolt — all forbid asking |
 
 ## Secrets
@@ -78,3 +79,8 @@ notifier itself would otherwise be silent.
   approved, `AWAITING_USER_FEEDBACK` is told to decide and ship, `FAILED` is
   reported once. Two attempts per unchanged `updateTime`, then one escalation to
   Slack and no further retries until the session actually moves.
+- `jules.sh new` refuses any repo absent from `repos.allow`, and refuses outright
+  if that file is missing. `repos.priority` must stay a subset of it, or rotation
+  will pick a repo the guard then rejects.
+- Session titles and activity text are written by Jules, not by us, so control
+  characters are stripped before that text reaches Slack or a triage report.

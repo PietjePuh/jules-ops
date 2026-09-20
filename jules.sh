@@ -14,6 +14,7 @@
 set -euo pipefail
 
 BASE="https://jules.googleapis.com/v1alpha"
+DIR_SELF="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 JULES_KEY_REF="${JULES_KEY_REF:-op://Agentforce/Jules api/password}"
 if [ -z "${JULES_API_KEY:-}" ]; then
   command -v op >/dev/null || { echo "jules: no JULES_API_KEY in env and no op CLI to resolve ${JULES_KEY_REF}" >&2; exit 2; }
@@ -95,6 +96,16 @@ case "$cmd" in
         *) echo "jules: unknown flag '$1'" >&2; exit 2 ;;
       esac
     done
+    allow_file="${JULES_ALLOW_FILE:-${DIR_SELF}/repos.allow}"
+    if [ ! -f "$allow_file" ]; then
+      echo "jules: allowlist ${allow_file} is missing — refusing to create a session" >&2
+      exit 3
+    fi
+    if ! grep -vE '^[[:space:]]*(#|$)' "$allow_file" \
+         | grep -qxF -e "$repo" -e "${repo#*/}"; then
+      echo "jules: '${repo}' is not in ${allow_file} — refusing to create a session" >&2
+      exit 3
+    fi
     source_name="$(resolve_source "$repo")"
     [ -n "$branch" ] || branch="$(api GET "/${source_name}" | jq -r '.githubRepo.defaultBranch.displayName')"
     body="$(jq -nc \

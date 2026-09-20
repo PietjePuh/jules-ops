@@ -1,0 +1,19 @@
+# Repos a session may be started against by anything in this repo.
+# Fail-closed: jules.sh refuses to create a session for a repo not listed
+# here, and refuses entirely if this file is missing. Owner is implied.
+# Deliberately excluded: 1password-toolkit, fleet-topology, docker-configs,
+# and any repo where an unreviewed agent commit is expensive to unwind.
+
+AI
+nova-mcp
+Toolbelt
+N8N---SOC-Workflows
+zero-trust
+TI
+N8n
+Main
+brain
+poncraft
+ract
+toolbelt-mobile
+BackgroundRemoval
