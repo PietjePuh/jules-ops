@@ -20,13 +20,16 @@ STAMP="$(date -u '+%d/%m/%Y %H:%M:%S UTC')"
 
 log() { printf '[%s] %s\n' "$(date -u '+%d/%m/%Y %H:%M:%S UTC')" "$1" >>"$LOG"; }
 
-# 1Password must be reachable (desktop CLI-integration unlock on fastbelt,
-# service account on nova). `op whoami` needs a full account sign-in and fails
-# even when vault reads work, so probe the actual key reference instead.
-# If unreachable, skip silently — the next timer pass retries.
-KEY_REF="${JULES_KEY_REF:-op://Agentforce/Jules api/password}"
+# 1Password reachability. Preferred: the fleet service account
+# (/etc/fleet/op-sa.env, same as nova's cron jobs) — works headless at boot.
+# Fallback: the desktop CLI integration. `op whoami` needs a full account
+# sign-in and fails even when vault reads work, so probe an actual read.
+KEY_REF="${JULES_KEY_REF:-op://Agentforce/fastbelt-env/GLM_API_KEY}"
+if [ -r /etc/fleet/op-sa.env ]; then
+  set -a; . /etc/fleet/op-sa.env; set +a
+fi
 if ! op read "$KEY_REF" >/dev/null 2>&1; then
-  log "1Password locked or unreachable (${KEY_REF}) — skipping this pass"
+  log "1Password unreachable (no SA file / SA down / desktop locked) — skipping this pass"
   exit 0
 fi
 
