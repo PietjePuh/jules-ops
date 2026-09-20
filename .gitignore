@@ -3,3 +3,4 @@ stalled-seen.json
 *.log
 triage-*.md
 rotate-cursor
+cron.log

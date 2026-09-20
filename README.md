@@ -46,11 +46,15 @@ through the real notification path.
 ## Schedule
 
 ```
-
-
-
-
+0 4   * * * jules-watch-cron.sh  >>cron.log 2>&1   # release surface
+30 4  * * * jules-triage.sh      >>cron.log 2>&1   # stalled-session report
+0 */3 * * * jules-stalled.sh     >>cron.log 2>&1   # waiting-on-you alert
+0 23  * * * jules-rotate.sh      >>cron.log 2>&1   # one session, next repo
 ```
+
+All paths are absolute in the real crontab. Host timezone is `Etc/UTC`, so these
+are UTC. Output goes to `cron.log`, never `/dev/null`: a failure inside the
+notifier itself would otherwise be silent.
 
 ## Notes
 
