@@ -116,7 +116,7 @@ case "$cmd" in
         requirePlanApproval: $approval}
        + (if $title == "" then {} else {title: $title} end)
        + (if $autopr then {automationMode: "AUTO_CREATE_PR"} else {} end)')"
-    api POST "/sessions" "$body" | jq -r '[.id, .state, .url] | @tsv'
+    api POST "/sessions" "$body" | jq -r '[.id, (.state // "QUEUED"), .url] | @tsv'
     ;;
   msg)
     [ $# -ge 2 ] || { echo "jules: msg <sessionId> <text>" >&2; exit 2; }

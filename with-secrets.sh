@@ -16,6 +16,15 @@ if [ -z "$ENV_FILE" ] || [ ! -r "$ENV_FILE" ]; then
   echo "with-secrets: no readable env file defining OP_SERVICE_ACCOUNT_TOKEN" >&2
   exit 3
 fi
+# cron.log has no structure of its own: entries from `op` and from curl carry no
+# timestamps, so an old failure is indistinguishable from a current one. Stamp
+# every invocation, and keep the file from growing without bound.
+LOG="${JULES_CRON_LOG:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/cron.log}"
+if [ -f "$LOG" ] && [ "$(stat -c %s "$LOG")" -gt 1048576 ]; then
+  tail -c 262144 "$LOG" > "${LOG}.trim" && mv "${LOG}.trim" "$LOG"
+fi
+printf -- '--- %s %s ---\n' "$(date -u '+%d/%m/%Y %H:%M:%S UTC')" "$(basename "${1:-?}")"
+
 set -a; . "$ENV_FILE"; set +a
 : "${OP_SERVICE_ACCOUNT_TOKEN:?with-secrets: ${ENV_FILE} did not define OP_SERVICE_ACCOUNT_TOKEN}"
 exec "$@"
