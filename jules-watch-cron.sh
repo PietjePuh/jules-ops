@@ -5,7 +5,7 @@
 #   env: JULES_NOTIFY_DRYRUN=1   print the payload instead of posting
 set -euo pipefail
 
-DIR="/var/lib/nova-mcp/work/jules-ops"
+DIR="${JULES_OPS_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 export JULES_WATCH_STATE="${DIR}/state.json"
 LOG="${DIR}/jules-watch.log"
 # shellcheck source=/dev/null

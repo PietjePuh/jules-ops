@@ -4,7 +4,7 @@
 # in a single pass. Changes nothing in Jules.
 set -euo pipefail
 
-DIR="/var/lib/nova-mcp/work/jules-ops"
+DIR="${JULES_OPS_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 HOURS="${JULES_STALL_HOURS:-4}"
 OUT="${JULES_TRIAGE_OUT:-${DIR}/triage-$(date -u '+%Y%m%d').md}"
 STALL_STATES='AWAITING_USER_FEEDBACK AWAITING_PLAN_APPROVAL FAILED'

@@ -15,7 +15,7 @@
 #        JULES_SESSIONS_SRC     read the session TSV from this file (testing)
 set -euo pipefail
 
-DIR="/var/lib/nova-mcp/work/jules-ops"
+DIR="${JULES_OPS_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 # shellcheck source=/dev/null
 . "${DIR}/notify.sh"
 
