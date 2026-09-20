@@ -48,17 +48,23 @@ through the real notification path.
 
 ## Schedule
 
+Host timezone is `Etc/UTC`. The scheduled Claude task runs at 07:00
+Europe/Amsterdam, which is 05:00 UTC while CEST is in force, so the cron jobs
+are stacked in the 45 minutes before that and their output is fresh when the
+task reads it.
+
 ```
-0 4   * * * jules-watch-cron.sh  >>cron.log 2>&1   # release surface
-30 4  * * * jules-triage.sh      >>cron.log 2>&1   # stalled-session report
-0 */3 * * * jules-stalled.sh     >>cron.log 2>&1   # waiting-on-you alert
-0 23  * * * jules-rotate.sh      >>cron.log 2>&1   # one session, next repo
-0 8   * * 1 jules-heartbeat.sh   >>cron.log 2>&1   # weekly proof of life
+15 4  * * * jules-watch-cron.sh   # release surface
+30 4  * * * jules-stalled.sh      # sweep, immediately pre-run
+45 4  * * * jules-triage.sh       # stalled-session report
+50 4  * * 1 jules-heartbeat.sh    # weekly, lands in the same window
+0 */3 * * * jules-stalled.sh      # sweep through the day
+0 23  * * * jules-rotate.sh       # one session on the next repo
 ```
 
-All paths are absolute in the real crontab. Host timezone is `Etc/UTC`, so these
-are UTC. Output goes to `cron.log`, never `/dev/null`: a failure inside the
-notifier itself would otherwise be silent.
+All output appends to `cron.log`, never `/dev/null`. When CET returns in October
+the task moves to 06:00 UTC and the gap widens by an hour; the ordering still
+holds.
 
 ## Notes
 
