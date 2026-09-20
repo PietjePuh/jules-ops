@@ -4,7 +4,7 @@
 
 # Tier 1 — canon and the things everything else depends on
 nova-mcp
-Toolbelt
+toolbelt-next
 
 # Tier 2 — security and automation surface, where a regression costs most
 N8N---SOC-Workflows
@@ -13,9 +13,11 @@ TI
 N8n
 
 # Tier 3 — active products
+omarchy-toolbelt
 brain
 poncraft
 toolbelt-mobile
+Toolbelt
 
 # Tier 4 — supporting
 BackgroundRemoval
