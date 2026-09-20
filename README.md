@@ -91,3 +91,9 @@ notifier itself would otherwise be silent.
   `markPullRequestReadyForReview` mutation, which is what starts CI. Verified on
   PietjePuh/BackgroundRemoval#328: draft=false, and a workflow queued within a
   minute.
+- Rotation applies backpressure rather than de-duplicating after the fact: it
+  skips any repo with `JULES_MAX_OPEN_PRS` (default 3) or more open Jules PRs,
+  and notifies when a run starts nothing instead of exiting silently. Closing
+  duplicate PRs by heuristic was tried in PietjePuh/Toolbelt's `dedupe-prs.yml`
+  and rolled back — overlap on a shared file is too weak a signal and it closed
+  legitimate work.
