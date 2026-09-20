@@ -2,3 +2,4 @@ state.json
 stalled-seen.json
 *.log
 triage-*.md
+rotate-cursor

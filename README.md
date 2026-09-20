@@ -14,7 +14,10 @@ coding agent, from the nova host. Secrets are resolved at run time from
 | `jules-stalled.sh` | Alerts on sessions waiting on a human, or failed, beyond a threshold |
 | `jules-triage.sh` | Read-only report of every stalled session and its last message |
 | `notify.sh` | Shared Slack notifier, sourced by the cron jobs |
+| `jules-unblock.sh` | Tells stalled sessions to decide and ship instead of asking |
+| `jules-rotate.sh` | Nightly: starts one session on the next repo, rotating personas |
 | `repos.priority` | Rotation order for scheduled work, highest value first |
+| `prompts/` | Persona prompts: sentinel, palette, bolt — all forbid asking |
 
 ## Secrets
 
@@ -46,6 +49,7 @@ through the real notification path.
 0 4   * * * /var/lib/nova-mcp/work/jules-ops/jules-watch-cron.sh >/dev/null 2>&1
 0 */3 * * * /var/lib/nova-mcp/work/jules-ops/jules-stalled.sh    >/dev/null 2>&1
 30 4  * * * /var/lib/nova-mcp/work/jules-ops/jules-triage.sh     >/dev/null 2>&1
+0 23  * * * /var/lib/nova-mcp/work/jules-ops/jules-rotate.sh     >/dev/null 2>&1
 ```
 
 ## Notes
@@ -61,3 +65,6 @@ through the real notification path.
 - The Jules REST API exposes sessions, activities and sources only. Scheduled
   tasks are a web-UI feature with no API surface, so recurring work that must be
   version-controlled has to be driven from cron here via `jules.sh new`.
+- `jules-rotate.sh` refuses to start a second session on a repo that already has
+  one live or stalled, so an unanswered question blocks that repo only and the
+  rotation moves on to the next one.
