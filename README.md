@@ -16,6 +16,7 @@ coding agent, from the nova host. Secrets are resolved at run time from
 | `notify.sh` | Shared Slack notifier, sourced by the cron jobs |
 | `jules-unblock.sh` | Manual nudge for specific session ids |
 | `jules-heartbeat.sh` | Weekly proof of life, so silence means idle and not dead |
+| `jules-prs.sh` | Counts open Jules PRs and marks drafts ready for review |
 | `jules-rotate.sh` | Nightly: starts one session on the next repo, rotating personas |
 | `repos.priority` | Rotation order for scheduled work, highest value first |
 | `repos.allow` | Fail-closed allowlist of repos a session may be created against |
@@ -84,3 +85,9 @@ notifier itself would otherwise be silent.
   will pick a repo the guard then rejects.
 - Session titles and activity text are written by Jules, not by us, so control
   characters are stripped before that text reaches Slack or a triage report.
+- Jules opens its pull requests as drafts. A draft runs no workflows, so an
+  auto-merge workflow keyed on a successful check run never fires and the PR
+  sits forever. `jules-prs.sh ready <repo>` marks them ready via the GraphQL
+  `markPullRequestReadyForReview` mutation, which is what starts CI. Verified on
+  PietjePuh/BackgroundRemoval#328: draft=false, and a workflow queued within a
+  minute.
