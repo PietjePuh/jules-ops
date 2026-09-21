@@ -18,6 +18,9 @@ coding agent, from the nova host. Secrets are resolved at run time from
 | `jules-heartbeat.sh` | Weekly proof of life, so silence means idle and not dead |
 | `jules-prs.sh` | Counts, groups, readies and closes open Jules PRs |
 | `jules-rotate.sh` | Nightly: starts one session on the next repo, rotating personas |
+| `jules-autopilot.sh` | One unattended pass for any fleet host: sweep, then at most one new session per day fleet-wide |
+| `jules-status.sh` | Read-only snapshot for the scheduled run: job logs, escalated/held sessions, PR backlog, rotation position |
+| `with-secrets.sh` | Sources the fleet op service-account env file, then execs the real job (for cron's empty environment) |
 | `repos.priority` | Rotation order for scheduled work, highest value first |
 | `repos.allow` | Fail-closed allowlist of repos a session may be created against |
 | `prompts/` | Persona prompts: sentinel, palette, bolt — all forbid asking |
