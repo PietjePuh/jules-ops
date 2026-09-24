@@ -1,0 +1,95 @@
+# The gate auto-merge.yml waits on. Must stay named "CI" -- auto-merge.yml's
+# `workflow_run` trigger matches on that exact workflow name.
+#
+# Deliberately narrow: these scripts are unattended cron automation driving a
+# paid API against live repos, so CI checks the things that are true without
+# credentials (syntax, the fail-closed allowlist invariant) and does not try to
+# run them.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  shell:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Syntax-check every shell script
+        run: |
+          fail=0
+          for f in $(git ls-files '*.sh'); do
+            if bash -n "$f" 2>/tmp/err; then
+              echo "ok    $f"
+            else
+              echo "FAIL  $f"; cat /tmp/err; fail=1
+            fi
+          done
+          exit $fail
+
+      - name: shellcheck (advisory)
+        continue-on-error: true
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+          git ls-files '*.sh' | xargs -r shellcheck -S warning || true
+
+  allowlist:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: repos.allow is present and non-empty
+        run: |
+          # jules.sh is fail-closed: a missing or empty repos.allow means it
+          # refuses every session. Losing this file is a silent full outage of
+          # the dispatch loop, so CI asserts it exists.
+          test -s repos.allow || { echo "repos.allow missing or empty -- jules.sh would refuse every repo"; exit 1; }
+          grep -cvE '^\s*(#|$)' repos.allow
+
+      - name: Entries are bare repo names, not owner/repo
+        run: |
+          # The owner is implied by jules.sh, which matches the repo name alone.
+          # An `owner/repo` line here never matches and silently disables that
+          # repo, which looks identical to it simply not being listed.
+          fail=0
+          while read -r line; do
+            case "$line" in ''|'#'*|' '*) continue ;; esac
+            case "$line" in
+              */*) echo "FAIL  '$line' has an owner prefix; jules.sh matches bare names"; fail=1 ;;
+              *)   echo "ok    $line" ;;
+            esac
+          done < repos.allow
+          exit $fail
+
+      - name: Each focus surface is reachable
+        run: |
+          # The three surfaces Dispatch owns. If one drops out of the allowlist
+          # Jules silently stops being able to touch it (jules.sh exits 3, no
+          # session, no error anyone sees).
+          fail=0
+          for r in Toolbelt omarchy-toolbelt dotfiles; do
+            if grep -qx "$r" repos.allow; then echo "ok    $r"; else echo "FAIL  $r not in repos.allow"; fail=1; fi
+          done
+          exit $fail
+
+      - name: Every prompt persona forbids asking questions
+        run: |
+          # Jules cannot ask a question mid-session; a persona that invites one
+          # produces a stalled session that burns a slot until it is swept.
+          fail=0
+          for p in prompts/*; do
+            [ -f "$p" ] || continue
+            if grep -qi "do not ask\|don't ask\|never ask\|without asking" "$p"; then
+              echo "ok    $p"
+            else
+              echo "FAIL  $p does not forbid asking questions"; fail=1
+            fi
+          done
+          exit $fail
