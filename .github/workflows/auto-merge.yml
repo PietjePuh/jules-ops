@@ -1,0 +1,153 @@
+# Auto-land pipeline: ready -> merge, with no human in the loop.
+#
+# Three jobs, same guards everywhere:
+#   auto-ready  (schedule) flip a green draft to ready-for-review
+#   auto-merge  (workflow_run) merge the PR whose CI just went green
+#   sweep       (schedule) drain any green PR the event path stranded
+#
+# Guards (identical on every path, none of them weaker than the others):
+#   * not labelled `no-auto-merge`      -> the do-not-land opt-out
+#   * not labelled `keep-draft`         -> auto-ready only; keeps a WIP a draft
+#   * at least one check ran, and every check is SUCCESS / NEUTRAL / SKIPPED
+#   * mergeStateStatus == CLEAN         -> resolved per-PR, see the note in sweep
+#
+# WHY GH_TOKEN IS SET EXPLICITLY ON EVERY STEP
+# The Toolbelt copy of this file omitted GH_TOKEN on its schedule jobs and
+# relied on the self-hosted runner user's ambient `gh` session. That label
+# resolved to two machines and only one of them had the session, so the job was
+# a coin flip: `gh pr list` failed auth, `|| true` swallowed it, the list came
+# back empty and the job printed "nothing to do" and exited 0. Across 23
+# scheduled runs it merged 0 PRs and flipped 0 drafts while looking green.
+# These jobs run on GitHub-hosted runners with an explicit token, so an auth
+# failure is a failure, not a silent no-op.
+name: Auto-merge on CI pass
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+  # The workflow_run trigger only fires for the SHA that just finished CI, so a
+  # PR that went green before this file existed is never re-attempted and gets
+  # stranded. The cron sweeps every currently-green open PR and drains that
+  # backlog without needing a fresh CI event.
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  # Required for `gh pr list --json statusCheckRollup`. Without them GitHub
+  # answers "Resource not accessible by integration" and, under `bash -e`, the
+  # whole job aborts before a single PR is evaluated.
+  checks: read
+  statuses: read
+
+concurrency:
+  group: auto-merge-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  auto-merge:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPO: ${{ github.repository }}
+      SHA: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      - name: Merge the PR whose CI just passed
+        run: |
+          # jq's array `contains` matches SUBSTRINGS of elements, so
+          # ["no-auto-merge"] | contains(["auto-merge"]) is true. Every label
+          # test in this file uses `index`, which compares whole elements.
+          PR=$(gh pr list --repo "$REPO" --state open --limit 100 \
+            --json number,headRefOid,labels \
+            --jq ".[] | select(.headRefOid == \"$SHA\") | select(.labels | map(.name) | index(\"no-auto-merge\") | not) | .number" \
+            | head -1)
+          if [ -z "$PR" ]; then
+            echo "No eligible PR for SHA $SHA"
+            exit 0
+          fi
+          # `gh pr merge` exits 1 on a draft ("Pull Request is still a draft"),
+          # which would fail the run. A draft is not ready to land -- the
+          # auto-ready job below is what promotes it. Skip cleanly.
+          if [ "$(gh pr view "$PR" --repo "$REPO" --json isDraft --jq '.isDraft')" = "true" ]; then
+            echo "PR #$PR is a draft, leaving it for auto-ready"
+            exit 0
+          fi
+          echo "Merging PR #$PR"
+          gh pr merge "$PR" --repo "$REPO" --squash --delete-branch
+
+  auto-ready:
+    runs-on: ubuntu-latest
+    if: github.event_name != 'workflow_run'
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPO: ${{ github.repository }}
+    steps:
+      - name: Flip green drafts to ready
+        run: |
+          # Agent sessions (Jules in particular) open every PR as a draft, and
+          # merge correctly refuses drafts. Without this job every agent PR sits
+          # forever waiting for a human click even when CI is fully green --
+          # that is the single biggest reason work stops reaching main.
+          # `keep-draft` is the human override for genuine WIP.
+          DRAFTS=$(gh pr list --repo "$REPO" --state open --limit 100 \
+            --json number,isDraft,labels,statusCheckRollup \
+            --jq '.[]
+              | select(.isDraft == true)
+              | select(.labels | map(.name) | (index("keep-draft") or index("no-auto-merge")) | not)
+              | select((.statusCheckRollup | length) > 0)
+              | select([.statusCheckRollup[]
+                  | ((.conclusion // .state // "PENDING") | ascii_upcase)
+                  | . as $s | ["SUCCESS","NEUTRAL","SKIPPED"] | index($s)] | all)
+              | .number')
+          if [ -z "$DRAFTS" ]; then
+            echo "No green drafts to promote"
+            exit 0
+          fi
+          for n in $DRAFTS; do
+            echo "Marking draft #$n ready (all checks green)"
+            gh pr ready "$n" --repo "$REPO" || echo "  (ready failed for #$n -- next tick will retry)"
+          done
+
+  sweep:
+    runs-on: ubuntu-latest
+    # Runs after auto-ready so a draft promoted this tick can also land this tick.
+    needs: [auto-ready]
+    if: always() && github.event_name != 'workflow_run'
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      REPO: ${{ github.repository }}
+    steps:
+      - name: Merge every green open PR
+        run: |
+          # mergeStateStatus is deliberately NOT filtered in this list query:
+          # `gh pr list --json mergeStateStatus` returns UNKNOWN because GitHub
+          # computes merge state lazily and a bulk list never triggers it. It is
+          # forced per-PR with `gh pr view` inside the loop below.
+          PRS=$(gh pr list --repo "$REPO" --state open --limit 100 \
+            --json number,isDraft,labels,statusCheckRollup \
+            --jq '.[]
+              | select(.isDraft == false)
+              | select(.labels | map(.name) | index("no-auto-merge") | not)
+              | select((.statusCheckRollup | length) > 0)
+              | select([.statusCheckRollup[]
+                  | ((.conclusion // .state // "PENDING") | ascii_upcase)
+                  | . as $s | ["SUCCESS","NEUTRAL","SKIPPED"] | index($s)] | all)
+              | .number')
+          if [ -z "$PRS" ]; then
+            echo "No green PRs to sweep"
+            exit 0
+          fi
+          for n in $PRS; do
+            MSS=$(gh pr view "$n" --repo "$REPO" --json mergeStateStatus --jq '.mergeStateStatus')
+            if [ "$MSS" != "CLEAN" ]; then
+              echo "Skipping PR #$n (mergeStateStatus=$MSS, not CLEAN)"
+              continue
+            fi
+            echo "Sweeping green PR #$n"
+            gh pr merge "$n" --repo "$REPO" --squash --delete-branch \
+              || echo "  (merge failed for #$n -- left for the next sweep)"
+          done
