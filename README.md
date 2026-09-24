@@ -23,7 +23,8 @@ coding agent, from the nova host. Secrets are resolved at run time from
 | `with-secrets.sh` | Sources the fleet op service-account env file, then execs the real job (for cron's empty environment) |
 | `repos.priority` | Rotation order for scheduled work, highest value first |
 | `repos.allow` | Fail-closed allowlist of repos a session may be created against |
-| `prompts/` | Persona prompts: sentinel, palette, bolt — all forbid asking |
+| `prompts/` | Persona prompts: sentinel, palette, bolt — all forbid asking, all carry the v2 surface freeze |
+| `DISPATCH-RANKING.md` | How Dispatch ranks backlog items; the active v2 surface freeze and what it blocks |
 
 ## Secrets
 
