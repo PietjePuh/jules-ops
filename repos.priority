@@ -2,22 +2,28 @@
 # One repo per line, "#" comments ignored, blank lines ignored.
 # Edit freely — this file is the list, nothing infers priority elsewhere.
 
-# Tier 1 — canon and the things everything else depends on
+# Tier 1 — the three focus surfaces (24/09/2026). Everything Dispatch feeds
+# Jules on a normal day comes from here: the SOC companion extension, the
+# Omarchy bar plugin, and the fresh-box install path.
+Toolbelt
+omarchy-toolbelt
+dotfiles
+
+# Tier 2 — canon and the things everything else depends on
 nova-mcp
 toolbelt-next
 
-# Tier 2 — security and automation surface, where a regression costs most
+# Tier 3 — security and automation surface, where a regression costs most
 N8N---SOC-Workflows
 zero-trust
 TI
 N8n
 
-# Tier 3 — active products
-omarchy-toolbelt
+# Tier 4 — other active products
+airplane-sole
 brain
 poncraft
 toolbelt-mobile
-Toolbelt
 
-# Tier 4 — supporting
+# Tier 5 — supporting
 BackgroundRemoval
