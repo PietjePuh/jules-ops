@@ -24,20 +24,30 @@ jobs:
 
       - name: Syntax-check every shell script
         run: |
+          # Per-job temp file, not a fixed /tmp/err -- this runner box is
+          # shared by several repos' runner users, and a fixed path
+          # collides across concurrent jobs (one job's leftover root/other
+          # -user file makes the next job's write hit "Permission denied"
+          # instead of ever containing the syntax error it's meant to show).
+          errfile=$(mktemp)
           fail=0
           for f in $(git ls-files '*.sh'); do
-            if bash -n "$f" 2>/tmp/err; then
+            if bash -n "$f" 2>"$errfile"; then
               echo "ok    $f"
             else
-              echo "FAIL  $f"; cat /tmp/err; fail=1
+              echo "FAIL  $f"; cat "$errfile"; fail=1
             fi
           done
+          rm -f "$errfile"
           exit $fail
 
       - name: shellcheck (advisory)
         continue-on-error: true
         run: |
-          sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+          # Self-hosted runner: no sudo apt-get here -- the runner user has no
+          # sudo rights, and the self-hosted runners are not all Debian-based,
+          # so a sudo prompt there would hang the job rather than fail it.
+          command -v shellcheck >/dev/null 2>&1 || { echo "shellcheck not installed on this runner - skipping"; exit 0; }
           git ls-files '*.sh' | xargs -r shellcheck -S warning || true
 
   allowlist:
@@ -70,11 +80,18 @@ jobs:
 
       - name: Each focus surface is reachable
         run: |
-          # The three surfaces Dispatch owns. If one drops out of the allowlist
+          # The surfaces Dispatch owns. If one drops out of the allowlist
           # Jules silently stops being able to touch it (jules.sh exits 3, no
           # session, no error anyone sees).
+          #
+          # Narrowed 25/09/2026 (Tim, verbatim, TIM-46 thread): keep
+          # omarchy-toolbelt, Toolbelt and airplane-sole; dotfiles explicitly
+          # dropped ("not te rest and dotfiles"). This list must track
+          # repos.allow's actual scope decisions, not be re-derived from an
+          # older one — that drift is what turned this job red on 25/09
+          # after repos.allow was narrowed without updating it here.
           fail=0
-          for r in Toolbelt omarchy-toolbelt dotfiles; do
+          for r in Toolbelt omarchy-toolbelt airplane-sole; do
             if grep -qx "$r" repos.allow; then echo "ok    $r"; else echo "FAIL  $r not in repos.allow"; fail=1; fi
           done
           exit $fail

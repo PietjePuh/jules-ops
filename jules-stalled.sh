@@ -58,11 +58,14 @@ act() { # act <verb> <id> ; verb = approve | unblock
   esac
 }
 
-# Rotation refuses to start work on a repo that already has a pile of open PRs.
-# Answering a stalled session produces a PR too, so the same limit applies here —
-# otherwise the sweep quietly undoes the backpressure rotation enforces.
-# Default mirrors rotation's JULES_MAX_OPEN_PRS (5); the old default of 3 here
-# created a phantom "3-open-PR cap" operators cited when halting sessions.
+# Rotation refuses to START NEW work on a repo that already has a pile of
+# open PRs. A nudge to an ALREADY-RUNNING session cannot create a 4th PR on
+# top of the cap (the session's PR, if any, already exists) -- gating nudges
+# too only freezes work already in flight for no backpressure benefit, so
+# nudges are exempt (Tim, 2026-09-25, TIM-46). New-session starts still
+# respect the cap. Default mirrors rotation's JULES_MAX_OPEN_PRS (5); the
+# old default of 3 here created a phantom "3-open-PR cap" operators cited
+# when halting sessions.
 MAX_OPEN_PRS="${JULES_MAX_OPEN_PRS:-5}"
 over_limit="$("${DIR}/jules-prs.sh" list 2>/dev/null \
   | awk -v m="$MAX_OPEN_PRS" '{n=$2; sub(/^open=/,"",n); if (n+0 >= m) print $1}')"
@@ -106,12 +109,12 @@ while IFS=$'\t' read -r id state updated title; do
   fi
 
   repo="$(session_repo "$id")"
-  if [ -n "${repo:-}" ] && grep -qxF "$repo" <<<"$over_limit"; then
-    held+="  ${repo}  ${id}  ${title}"$'\n'
-    next_json="$(jq -c --arg i "$id" --arg u "$updated" --arg r "$repo" --argjson a "$attempts" \
-      '.[$i] = {updated: $u, attempts: $a, repo: $r, held: true}' <<<"$next_json")"
-    continue
-  fi
+  # NOTE: nudging/approving an ALREADY-RUNNING stalled session is exempt from
+  # MAX_OPEN_PRS (Tim, 2026-09-25, TIM-46) — the session's own PR, if any,
+  # already exists, so holding it here only freezes in-flight work with no
+  # backpressure benefit. over_limit is still computed above and still
+  # gates NEW session starts in jules-rotate.sh / jules-autopilot.sh.
+
   verb=unblock
   [ "$state" != AWAITING_PLAN_APPROVAL ] || verb=approve
   if [ "$state" = COMPLETED ] \
@@ -126,7 +129,7 @@ while IFS=$'\t' read -r id state updated title; do
     continue
   fi
   woken=false
-  if act "$verb" "$id" "$UNBLOCK_MSG"; then
+  if act "$verb" "$id"; then
     attempts=$((attempts + 1)); n_acted=$((n_acted + 1))
     [ "$n_acted" -gt 10 ] || acted+="  ${verb}  ${id}  ${title}"$'\n'
     # a COMPLETED session is woken at most once: mark it only after a
