@@ -27,6 +27,13 @@ coding agent, from the nova host. Secrets are resolved at run time from
 | `repos.allow` | Fail-closed allowlist of repos a session may be created against |
 | `prompts/` | Persona prompts: sentinel, palette, bolt — all forbid asking |
 
+## Working in this repo
+
+More than one agent works here at once. Each has its own git work tree under
+`~/github/.worktrees/<agent>/jules-ops`; `~/github/jules-ops` stays on `main` and
+is for reading. See [WORKTREES.md](WORKTREES.md) — sharing one checkout silently
+swapped `repos.allow` under a running dispatch on 24/09/2026.
+
 ## Secrets
 
 | Purpose | Reference | Override |
