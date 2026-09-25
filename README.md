@@ -25,7 +25,8 @@ coding agent, from the nova host. Secrets are resolved at run time from
 | `repos.priority` | Rotation order for scheduled work, highest value first |
 | `repos.pinned` | Repos guaranteed a slot every pass, before round-robin, at a higher open-PR ceiling — so the busiest repo (Toolbelt) never waits behind 13 others |
 | `repos.allow` | Fail-closed allowlist of repos a session may be created against |
-| `prompts/` | Persona prompts: sentinel, palette, bolt — all forbid asking |
+| `prompts/` | Persona prompts: sentinel, palette, bolt — all forbid asking, all carry the v2 surface freeze |
+| `DISPATCH-RANKING.md` | How Dispatch ranks backlog items; the active v2 surface freeze and what it blocks |
 
 ## Secrets
 
