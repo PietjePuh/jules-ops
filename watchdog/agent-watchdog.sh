@@ -105,12 +105,44 @@ try_recover() {
     return 1
   fi
 
-  curl -sf -X POST "${PAPERCLIP_API}/agents/${agent_id}/pause" \
-    -H 'Content-Type: application/json' \
-    -d "$(jq -nc --arg r "Provider lockout ($broken_adapter): $broken_error — auto-replaced by agent-watchdog with hermes_local/claude-sonnet-5 (${new_id})." '{reason:$r}')" >/dev/null
+  # /terminate, not /pause: pause is reversible and someone can (and, seen
+  # live 2026-09-25, WILL) click resume on an agent that looks broken in the
+  # UI without knowing it's intentionally retired -- that flaps it right back
+  # into the same dead-account error a few minutes later, and every flap
+  # hires yet another duplicate replacement. terminate() is a one-way status
+  # the heartbeat finalizer already treats as permanently inert (same
+  # protection as paused, but nothing in the normal UI resumes it by
+  # accident). History/board position is preserved either way.
+  curl -sf -X POST "${PAPERCLIP_API}/agents/${agent_id}/terminate" \
+    -H 'Content-Type: application/json' >/dev/null 2>&1 || true
 
-  printf '[%s] recovered %s (%s -> hermes_local, new agent %s)\n' "$stamp" "$name" "$agent_id" "$new_id" >>"$LOG"
-  notify ":recycle: agent-watchdog: ${name} was locked out (${broken_adapter}: ${broken_error}) — hired ${new_name} (hermes_local/claude-sonnet-5, id ${new_id}), paused the original."
+  # Terminating the old agent does NOT move its open work. Left alone, every
+  # issue assigned to it (assigneeAgentId) sits orphaned — its owner can
+  # never pick it up again — until a human notices the board looks empty
+  # and digs for why. Happened for real 2026-09-25: 29 non-done issues
+  # (including the org's top-level "Fleet manager"/"Paperclip onboarding"
+  # roots) stayed pinned to 3 paused agents, so nothing moved and the board
+  # looked dead even though 3 healthy replacements were sitting idle right
+  # next to them. Reassign every non-done issue to the new agent so this
+  # can't happen silently again.
+  local reassigned=0 reassign_failed=0
+  local issues_json
+  issues_json="$(curl -sf "${PAPERCLIP_API}/companies/${CID}/issues")"
+  for issue_id in $(jq -r --arg aid "$agent_id" \
+      '(if type=="array" then . else (.issues // .data // []) end)[] | select(.assigneeAgentId == $aid and .status != "done") | .id' \
+      <<<"$issues_json"); do
+    if curl -sf -X PATCH "${PAPERCLIP_API}/issues/${issue_id}" \
+        -H 'Content-Type: application/json' \
+        -d "$(jq -nc --arg aid "$new_id" '{assigneeAgentId:$aid}')" >/dev/null 2>&1; then
+      reassigned=$((reassigned+1))
+    else
+      reassign_failed=$((reassign_failed+1))
+    fi
+  done
+
+  printf '[%s] recovered %s (%s -> hermes_local, new agent %s); reassigned %d open issue(s), %d failed\n' \
+    "$stamp" "$name" "$agent_id" "$new_id" "$reassigned" "$reassign_failed" >>"$LOG"
+  notify ":recycle: agent-watchdog: ${name} was locked out (${broken_adapter}: ${broken_error}) — hired ${new_name} (hermes_local/claude-sonnet-5, id ${new_id}), paused the original, reassigned ${reassigned} open issue(s) to it${reassign_failed:+ (${reassign_failed} reassignment failed, check manually)}."
   return 0
 }
 
