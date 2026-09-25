@@ -7,6 +7,7 @@ persona-cursor
 cron.log
 notify.log
 .jules-rotate.lock
+.jules-archive.lock
 archived-seen.json
 jules-history.jsonl
 dispatch-*.md

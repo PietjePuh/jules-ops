@@ -16,6 +16,21 @@
 set -euo pipefail
 
 DIR="${JULES_OPS_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+
+# Lock: 2026-09-25 incident — testing this left 3 overlapping instances
+# running (a manual foreground run plus retries after apparent timeouts that
+# were actually still working in the background). All 3 read the same
+# stale in-memory archived-seen.json snapshot and each appended the same
+# ~50 sessions again, producing ~50 duplicate jules-history.jsonl lines.
+# Same fix as jules-rotate.sh's lock: refuse to run a second instance on
+# this host instead of racing.
+LOCKFILE="${DIR}/.jules-archive.lock"
+exec 201>"$LOCKFILE"
+if ! flock -n 201; then
+  echo "jules-archive: another instance is already running on this host, exiting"
+  exit 0
+fi
+
 OWNER="${JULES_OWNER:-PietjePuh}"
 SEEN="${JULES_ARCHIVE_SEEN:-${DIR}/archived-seen.json}"
 LOG="${JULES_HISTORY_LOG:-${DIR}/jules-history.jsonl}"
@@ -33,7 +48,6 @@ else
 fi
 
 prev_json="$(cat "$SEEN" 2>/dev/null || echo '{}')"
-next_json="$prev_json"
 n_archived=0
 
 # best-effort: cache repo -> all Jules PRs (number, title, url, headRefName)
@@ -56,7 +70,7 @@ while IFS=$'\t' read -r id state updated title; do
   [ -n "${id:-}" ] || continue
   case "$state" in COMPLETED|FAILED) ;; *) continue ;; esac
 
-  prev_updated="$(jq -r --arg i "$id" '.[$i] // empty' <<<"$prev_json")"
+  prev_updated="$(jq -r --arg i "$id" '.[$i] // empty' "$SEEN" 2>/dev/null || jq -r --arg i "$id" '.[$i] // empty' <<<"$prev_json")"
   [ "$prev_updated" != "$updated" ] || continue   # already archived at this updateTime
 
   full="$("${DIR}/jules.sh" get "$id" 2>/dev/null || echo '{}')"
