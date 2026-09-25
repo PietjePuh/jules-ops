@@ -18,7 +18,7 @@ permissions:
 
 jobs:
   shell:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, toolbelt]
     steps:
       - uses: actions/checkout@v4
 
@@ -37,11 +37,14 @@ jobs:
       - name: shellcheck (advisory)
         continue-on-error: true
         run: |
-          sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+          # Self-hosted runner: no sudo apt-get here -- the runner user has no
+          # sudo rights, and the self-hosted runners are not all Debian-based,
+          # so a sudo prompt there would hang the job rather than fail it.
+          command -v shellcheck >/dev/null 2>&1 || { echo "shellcheck not installed on this runner - skipping"; exit 0; }
           git ls-files '*.sh' | xargs -r shellcheck -S warning || true
 
   allowlist:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, toolbelt]
     steps:
       - uses: actions/checkout@v4
 
