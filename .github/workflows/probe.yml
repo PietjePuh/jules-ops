@@ -1,0 +1,37 @@
+# TEMPORARY diagnostic. Delete once the CI failure is understood.
+#
+# Both CI jobs have failed in 2-3 seconds on every run since the workflows
+# landed (PR #3 24/09 21:47, PRs #5/#6/#7 25/09 08:00) -- including a PR that
+# only adds a markdown file. A 2-second failure is a job that never reached a
+# step, so it is not the assertions. Three candidates, and these two jobs tell
+# them apart without needing the Actions log:
+#
+#   bare      no `uses:` at all. Fails  -> hosted-runner minutes / spending
+#             limit, or ubuntu-latest unavailable. Passes -> runners are fine.
+#   checkout  bare + actions/checkout@v4. Fails while `bare` passes ->
+#             third-party/marketplace actions are blocked by an Actions
+#             permissions policy on the repo or account.
+name: runner probe
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  bare:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Nothing but a shell
+        run: echo "runner reached a step"
+
+  checkout:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Nothing but a shell
+        run: echo "runner reached a step"
+      - uses: actions/checkout@v4
+      - name: Checkout succeeded
+        run: git log --oneline -1
