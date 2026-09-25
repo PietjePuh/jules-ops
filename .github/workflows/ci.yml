@@ -79,6 +79,21 @@ jobs:
           done
           exit $fail
 
+      - name: Deliberately excluded repos stay excluded
+        run: |
+          # The inverse of the step above, and the half that actually matters for
+          # security. repos.allow is the only thing standing between an agent
+          # session and these repos -- there is no branch protection on this repo
+          # (private on a free plan, so rulesets and required checks are
+          # unavailable), so a PR that appends one must not be able to go green.
+          # Keep this list in sync with the "Deliberately excluded" header line
+          # in repos.allow.
+          fail=0
+          for r in 1password-toolkit fleet-topology docker-configs; do
+            if grep -qx "$r" repos.allow; then echo "FAIL  $r is deliberately excluded"; fail=1; else echo "ok    $r absent"; fi
+          done
+          exit $fail
+
       - name: Every prompt persona forbids asking questions
         run: |
           # Jules cannot ask a question mid-session; a persona that invites one
