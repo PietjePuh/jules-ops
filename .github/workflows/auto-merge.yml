@@ -49,7 +49,7 @@ concurrency:
 
 jobs:
   auto-merge:
-    runs-on: [self-hosted, toolbelt]
+    runs-on: ubuntu-latest
     if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -80,7 +80,7 @@ jobs:
           gh pr merge "$PR" --repo "$REPO" --squash --delete-branch
 
   auto-ready:
-    runs-on: [self-hosted, toolbelt]
+    runs-on: ubuntu-latest
     if: github.event_name != 'workflow_run'
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -113,7 +113,7 @@ jobs:
           done
 
   sweep:
-    runs-on: [self-hosted, toolbelt]
+    runs-on: ubuntu-latest
     # Runs after auto-ready so a draft promoted this tick can also land this tick.
     needs: [auto-ready]
     if: always() && github.event_name != 'workflow_run'
