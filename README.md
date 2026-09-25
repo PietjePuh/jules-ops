@@ -17,11 +17,13 @@ coding agent, from the nova host. Secrets are resolved at run time from
 | `jules-unblock.sh` | Manual nudge for specific session ids |
 | `jules-heartbeat.sh` | Weekly proof of life, so silence means idle and not dead |
 | `jules-prs.sh` | Counts, groups, readies and closes open Jules PRs |
-| `jules-rotate.sh` | Nightly: starts one session on the next repo, rotating personas |
-| `jules-autopilot.sh` | One unattended pass for any fleet host: sweep, then at most one new session per day fleet-wide |
+| `jules-rotate.sh` | Starts sessions on every eligible repo each pass (pinned repos first), up to the live 100/day quota |
+| `jules-archive.sh` | Archives every completed/failed session's prompt + outcome + PR link to `jules-history.jsonl` |
+| `jules-autopilot.sh` | One unattended pass for any fleet host: sweep, then rotate (rotate.sh self-limits to the daily quota), then archive |
 | `jules-status.sh` | Read-only snapshot for the scheduled run: job logs, escalated/held sessions, PR backlog, rotation position |
 | `with-secrets.sh` | Sources the fleet op service-account env file, then execs the real job (for cron's empty environment) |
 | `repos.priority` | Rotation order for scheduled work, highest value first |
+| `repos.pinned` | Repos guaranteed a slot every pass, before round-robin, at a higher open-PR ceiling — so the busiest repo (Toolbelt) never waits behind 13 others |
 | `repos.allow` | Fail-closed allowlist of repos a session may be created against |
 | `prompts/` | Persona prompts: sentinel, palette, bolt — all forbid asking |
 
@@ -62,8 +64,14 @@ task reads it.
 45 4  * * * jules-triage.sh       # stalled-session report
 50 4  * * 1 jules-heartbeat.sh    # weekly, lands in the same window
 0 */3 * * * jules-stalled.sh      # sweep through the day
-0 23  * * * jules-rotate.sh       # one session on the next repo
 ```
+
+Note (2026-09-25): on fastbelt none of the above are in an active crontab or
+systemd timer — `jules-autopilot.timer` (every 15 min) now runs sweep, rotate,
+and archive as one pass and supersedes the old `jules-stalled.sh`/`jules-rotate.sh`
+lines above. `jules-watch-cron.sh`/`jules-triage.sh`/`jules-heartbeat.sh` are
+not wired into anything active on this host — check nova before assuming this
+block is live anywhere.
 
 All output appends to `cron.log`, never `/dev/null`. When CET returns in October
 the task moves to 06:00 UTC and the gap widens by an hour; the ordering still

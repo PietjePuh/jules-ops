@@ -3,5 +3,10 @@ stalled-seen.json
 *.log
 triage-*.md
 rotate-cursor
+persona-cursor
 cron.log
 notify.log
+.jules-rotate.lock
+archived-seen.json
+jules-history.jsonl
+dispatch-*.md

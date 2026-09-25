@@ -1,0 +1,19 @@
+# Repos that must always get a rotation slot first, every pass — never
+# starved by round-robin spreading across repos.priority, and held to a
+# higher open-PR ceiling since they're expected to carry more concurrent work.
+#
+# Added 25/09/2026 (Tim: "jules needs to keep the most active repo alive and
+# updating to next versions") after jules-rotate.sh was changed to spend the
+# full daily quota across every eligible repo in one pass instead of starting
+# one session total — that spread risked starving the busiest repo behind 13
+# others each getting a turn. Pinned repos are picked first, before the
+# round-robin cursor runs, using JULES_PINNED_MAX_OPEN_PRS (default 8) instead
+# of the normal MAX_OPEN_PRS.
+#
+# One repo per line, "#" comments ignored, blank lines ignored. Must also
+# appear in repos.priority and repos.allow.
+
+# Highest session/PR volume by a wide margin (12 open PRs vs 5 for the next
+# repo; explicit Tier-1 focus surface in repos.priority) — the SOC companion
+# extension Tim actively ships from daily.
+Toolbelt
