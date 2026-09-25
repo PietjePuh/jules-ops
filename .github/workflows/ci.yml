@@ -70,11 +70,18 @@ jobs:
 
       - name: Each focus surface is reachable
         run: |
-          # The three surfaces Dispatch owns. If one drops out of the allowlist
+          # The surfaces Dispatch owns. If one drops out of the allowlist
           # Jules silently stops being able to touch it (jules.sh exits 3, no
           # session, no error anyone sees).
+          #
+          # Narrowed 25/09/2026 (Tim, verbatim, TIM-46 thread): keep
+          # omarchy-toolbelt, Toolbelt and airplane-sole; dotfiles explicitly
+          # dropped ("not te rest and dotfiles"). This list must track
+          # repos.allow's actual scope decisions, not be re-derived from an
+          # older one — that drift is what turned this job red on 25/09
+          # after repos.allow was narrowed without updating it here.
           fail=0
-          for r in Toolbelt omarchy-toolbelt dotfiles; do
+          for r in Toolbelt omarchy-toolbelt airplane-sole; do
             if grep -qx "$r" repos.allow; then echo "ok    $r"; else echo "FAIL  $r not in repos.allow"; fail=1; fi
           done
           exit $fail
