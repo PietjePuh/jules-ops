@@ -4,25 +4,16 @@
 # Deliberately excluded: 1password-toolkit, fleet-topology, docker-configs,
 # and any repo where an unreviewed agent commit is expensive to unwind.
 # Removed 20/09/2026 as archived and therefore read-only: AI, Main, ract.
-# Added 20/09/2026: toolbelt-next (the active toolbelt extension dev repo)
-# and omarchy-toolbelt (the Omarchy bar plugin published today).
-# Added 23/09/2026: airplane-sole — replaces the n8n Daily-AI-Improve/PR-Review
-# workflows on titan (dead: expired API key + 404ing webhook). Jules now covers
-# the three repos actually in daily use: Toolbelt, omarchy-toolbelt, airplane-sole.
-# Added 24/09/2026: dotfiles — the fast-install surface. omarchy-bootstrap and
-# packages.conf live there; without this line Jules cannot touch it at all.
+#
+# Narrowed 25/09/2026 (Tim, verbatim): "keep omarchy-toolbelt and toolbelt
+# and airplanesole not te rest and dotfiles and if creadits are over to
+# work on the rock-city-spot [rork-cityspot-finder]". Removed: dotfiles,
+# nova-mcp, toolbelt-next, N8N---SOC-Workflows, zero-trust, TI, N8n, brain,
+# poncraft, toolbelt-mobile, BackgroundRemoval — all explicitly out of
+# scope now, do not add back without Tim saying so again. Added
+# rork-cityspot-finder as the fallback repo for leftover daily budget.
 
-dotfiles
-nova-mcp
-toolbelt-next
 omarchy-toolbelt
 Toolbelt
 airplane-sole
-N8N---SOC-Workflows
-zero-trust
-TI
-N8n
-brain
-poncraft
-toolbelt-mobile
-BackgroundRemoval
+rork-cityspot-finder

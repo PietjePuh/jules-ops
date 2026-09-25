@@ -2,28 +2,15 @@
 # One repo per line, "#" comments ignored, blank lines ignored.
 # Edit freely — this file is the list, nothing infers priority elsewhere.
 
-# Tier 1 — the three focus surfaces (24/09/2026). Everything Dispatch feeds
-# Jules on a normal day comes from here: the SOC companion extension, the
-# Omarchy bar plugin, and the fresh-box install path.
-Toolbelt
+# Narrowed 25/09/2026 (Tim, verbatim): "keep omarchy-toolbelt and toolbelt
+# and airplanesole not te rest and dotfiles" — these 3 are the ONLY focus
+# repos now. Do not add other repos back without Tim saying so again.
 omarchy-toolbelt
-dotfiles
-
-# Tier 2 — canon and the things everything else depends on
-nova-mcp
-toolbelt-next
-
-# Tier 3 — security and automation surface, where a regression costs most
-N8N---SOC-Workflows
-zero-trust
-TI
-N8n
-
-# Tier 4 — other active products
+Toolbelt
 airplane-sole
-brain
-poncraft
-toolbelt-mobile
 
-# Tier 5 — supporting
-BackgroundRemoval
+# Fallback (Tim: "if creadits are over to work on the rork-cityspot-finder"):
+# not in repos.pinned, so it only gets LEFTOVER daily budget after the 3
+# focus repos above are busy/at their PR ceiling for a pass — never first
+# pick, exactly the "once credits are over" behaviour requested.
+rork-cityspot-finder
