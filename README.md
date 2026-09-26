@@ -157,7 +157,14 @@ no session for, and close theirs.
   repo is already over the limit is reported as held rather than nudged, because
   answering it produces another pull request into a repo that cannot absorb one.
   The session's repo is cached in the state file so the backlog is not
-  re-resolved on every run.
+  re-resolved on every run. `jules-stalled.sh` defaults to the same limit as
+  rotation (5; overridable with `JULES_MAX_OPEN_PRS`).
+- A session that reaches `COMPLETED` while holding an unshipped diff (usually
+  halted mid-task by a hold instruction) is invisible to every other sweep
+  state, so `jules-stalled.sh` wakes such a session once with the standard
+  unblock message — shipping the held diff is then its task. Woken sessions are
+  recorded in `stalled-seen.json` with `woken: true` and never re-woken; a
+  session that was held stays held until its repo drops below the limit.
 - `JULES_NOTIFY` selects the channel: `log` (default) appends alerts to
   `notify.log`, `slack` posts through the webhook, `off` discards them. The
   scheduled task is the notification channel, so alerts are written where it
