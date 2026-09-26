@@ -11,3 +11,4 @@ notify.log
 archived-seen.json
 jules-history.jsonl
 dispatch-*.md
+.jules-stalled.lock

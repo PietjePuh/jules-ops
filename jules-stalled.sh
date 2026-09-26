@@ -28,6 +28,12 @@ UNBLOCK_MSG='Pick the single highest-value item from the candidates you listed a
 stamp="$(date -u '+%d/%m/%Y %H:%M:%S UTC')"
 cutoff="$(date -u -d "-${HOURS} hours" '+%Y-%m-%dT%H:%M:%SZ')"
 
+# Single-flight guard: the 15-min timer and a Dispatch heartbeat can fire the
+# sweep in the same minute (25/09 20:45-20:49Z saw three overlapping passes);
+# double nudges burn Jules quota and corrupt seen/attempts state. Fail-closed.
+exec 9>"${DIR}/.jules-stalled.lock"
+flock -n 9 || exit 0
+
 if [ -n "${JULES_SESSIONS_SRC:-}" ]; then
   sessions="$(cat "${JULES_SESSIONS_SRC}")"
 else
