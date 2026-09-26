@@ -47,7 +47,20 @@ stamp="$(date -u '+%d/%m/%Y %H:%M:%S UTC')"
 # Lockout error patterns -> nothing repo-specific, just "this account is dead
 # for now, don't keep retrying it."
 is_lockout_error() {
-  grep -qiE 'terminal limit failure|usage limit|try again at|rate limit|429|no balance|insufficient|quota exceeded' <<<"$1"
+  grep -qiE 'terminal limit failure|usage limit|try again at|rate limit|429|no balance|insufficient|Individual quota reached|upgrade your subscription|quota exceeded|five_hour|seven_day|session limit|weekly limit|resets at|resets_at|overage.*rejected|overage_disabled' <<<"$1"
+}
+
+# Best-effort provider guess from adapterType, used only to pick the NEXT
+# provider in the fallback ring (see try_recover) so a lockout never
+# "recovers" onto the same account that just died.
+adapter_to_provider() {
+  case "$1" in
+    claude_local) echo "anthropic" ;;
+    codex_local) echo "openai" ;;
+    opencode_local) echo "openrouter" ;;
+    grok_local) echo "xai" ;;
+    *) echo "" ;;
+  esac
 }
 
 agents_json="$(curl -sf "${PAPERCLIP_API}/companies/${CID}/agents")"
@@ -61,7 +74,24 @@ try_recover() {
   local agent_id="$1" name="$2" role="$3" reports_to="$4" icon="$5" \
         title="$6" capabilities="$7" cwd="$8" desired_skills_json="$9" \
         instructions_file="${10}" instructions_root="${11}" broken_adapter="${12}" \
-        broken_error="${13}"
+        broken_error="${13}" broken_provider="${14:-}"
+
+  # Pick the next provider in the ring so a lockout never "recovers" onto the
+  # SAME account that just died (e.g. claude_local/anthropic hitting its 5h/
+  # weekly cap must NOT be replaced by another anthropic-backed hermes_local
+  # agent -- that one dies identically within seconds). Ring order: anthropic
+  # -> zai -> anthropic. Anything else (openai/codex, opencode/openrouter,
+  # unknown) defaults into anthropic first since it's Tim's paid subscription
+  # and usually has headroom right after a DIFFERENT provider locks out.
+  local fb_model fb_provider
+  case "$broken_provider" in
+    anthropic)
+      fb_model="glm-4.6"; fb_provider="zai" ;;
+    zai)
+      fb_model="claude-sonnet-5"; fb_provider="anthropic" ;;
+    *)
+      fb_model="claude-sonnet-5"; fb_provider="anthropic" ;;
+  esac
 
   local new_name="${name} (recovered)"
   local hire_payload
@@ -73,6 +103,8 @@ try_recover() {
     --arg title "$title" \
     --arg capabilities "$capabilities" \
     --arg cwd "$cwd" \
+    --arg fbModel "$fb_model" \
+    --arg fbProvider "$fb_provider" \
     --argjson desiredSkills "$desired_skills_json" \
     '{
       name: $name, role: $role,
@@ -82,7 +114,7 @@ try_recover() {
       capabilities: (if $capabilities == "" then null else $capabilities end),
       adapterType: "hermes_local",
       adapterConfig: ({
-        model: "claude-sonnet-5", provider: "anthropic",
+        model: $fbModel, provider: $fbProvider,
         hermesCommand: "/home/tim/.local/bin/hermes",
         persistSession: true,
         paperclipSkillSync: {desiredSkills: $desiredSkills}
@@ -140,9 +172,9 @@ try_recover() {
     fi
   done
 
-  printf '[%s] recovered %s (%s -> hermes_local, new agent %s); reassigned %d open issue(s), %d failed\n' \
-    "$stamp" "$name" "$agent_id" "$new_id" "$reassigned" "$reassign_failed" >>"$LOG"
-  notify ":recycle: agent-watchdog: ${name} was locked out (${broken_adapter}: ${broken_error}) — hired ${new_name} (hermes_local/claude-sonnet-5, id ${new_id}), paused the original, reassigned ${reassigned} open issue(s) to it${reassign_failed:+ (${reassign_failed} reassignment failed, check manually)}."
+  printf '[%s] recovered %s (%s -> hermes_local/%s/%s, new agent %s); reassigned %d open issue(s), %d failed\n' \
+    "$stamp" "$name" "$agent_id" "$fb_provider" "$fb_model" "$new_id" "$reassigned" "$reassign_failed" >>"$LOG"
+  notify ":recycle: agent-watchdog: ${name} was locked out (${broken_adapter}: ${broken_error}) — hired ${new_name} (hermes_local/${fb_provider}/${fb_model}, id ${new_id}), paused the original, reassigned ${reassigned} open issue(s) to it${reassign_failed:+ (${reassign_failed} reassignment failed, check manually)}."
   return 0
 }
 
@@ -184,7 +216,7 @@ for row in $(jq -r '(if type=="array" then . else (.agents // .data // []) end)[
   desiredSkills="$(jq -c '.adapterConfig.paperclipSkillSync.desiredSkills // []' <<<"$agent")"
 
   if try_recover "$aid" "$aname" "$role" "$reportsTo" "$icon" "$title" \
-                  "$capabilities" "$cwd" "$desiredSkills" "" "" "$adapter" "$lastError"; then
+                  "$capabilities" "$cwd" "$desiredSkills" "" "" "$adapter" "$lastError" "$(adapter_to_provider "$adapter")"; then
     recovered=$((recovered+1))
   fi
 done
