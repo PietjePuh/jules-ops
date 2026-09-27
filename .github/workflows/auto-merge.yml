@@ -18,7 +18,7 @@
 # a coin flip: `gh pr list` failed auth, `|| true` swallowed it, the list came
 # back empty and the job printed "nothing to do" and exited 0. Across 23
 # scheduled runs it merged 0 PRs and flipped 0 drafts while looking green.
-# These jobs run on GitHub-hosted runners with an explicit token, so an auth
+# These jobs run with an explicit token, so an auth
 # failure is a failure, not a silent no-op.
 name: Auto-merge on CI pass
 
@@ -49,7 +49,7 @@ concurrency:
 
 jobs:
   auto-merge:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, jules-ops]
     if: github.event_name == 'workflow_run' && github.event.workflow_run.conclusion == 'success'
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -80,7 +80,7 @@ jobs:
           gh pr merge "$PR" --repo "$REPO" --squash --delete-branch
 
   auto-ready:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, jules-ops]
     if: github.event_name != 'workflow_run'
     env:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -113,7 +113,7 @@ jobs:
           done
 
   sweep:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, jules-ops]
     # Runs after auto-ready so a draft promoted this tick can also land this tick.
     needs: [auto-ready]
     if: always() && github.event_name != 'workflow_run'
