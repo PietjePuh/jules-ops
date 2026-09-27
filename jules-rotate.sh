@@ -68,6 +68,7 @@ if [ "$budget" -le 0 ]; then
   printf '[%s] daily quota reached: %s sessions created today (limit %s, margin %s) — nothing started\n' \
     "$stamp" "$used_today" "$DAILY_LIMIT" "$DAILY_SAFETY_MARGIN" >>"$LOG"
   notify ":chart_with_upwards_trend: jules-rotate: daily quota reached (${used_today}/${DAILY_LIMIT}, ${stamp}) — resets at UTC midnight"
+  printf 'started=0 skipped=0 failed=0 budget_left=0 quota_reached=1\n'
   exit 0
 fi
 
@@ -137,6 +138,8 @@ if [ "${#started[@]}" -eq 0 ] && [ -z "$failed" ]; then
   notify ":no_entry: jules-rotate started nothing (${stamp})
 every repo is busy or over its open-PR limit:
   ${skipped}"
+  printf 'started=0 skipped=%s failed=0 budget_left=%s\n' \
+    "$(wc -w <<<"$skipped")" "$budget"
   exit 0
 fi
 
@@ -145,6 +148,10 @@ if [ "${#started[@]}" -gt 0 ]; then
 $(printf '  %s\n' "${started[@]}")
 skipped: ${skipped:-none}"
 fi
+# Single machine-readable result line on stdout — the caller-facing contract
+# (autopilot log capture, MCP wrapper). Prose stays in the log and Slack.
+printf 'started=%s skipped=%s failed=%s budget_left=%s\n' \
+  "${#started[@]}" "$(wc -w <<<"$skipped")" "$(wc -w <<<"$failed")" "$budget"
 if [ -n "$failed" ]; then
   notify ":rotating_light: jules-rotate: failed to start on: ${failed}(${stamp})"
   exit 1

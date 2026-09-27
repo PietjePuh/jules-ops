@@ -27,7 +27,7 @@ DIR="${JULES_OPS_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 LOCKFILE="${DIR}/.jules-archive.lock"
 exec 201>"$LOCKFILE"
 if ! flock -n 201; then
-  echo "jules-archive: another instance is already running on this host, exiting"
+  echo "jules-archive: another instance is already running on this host, exiting" >&2
   exit 0
 fi
 
@@ -110,3 +110,7 @@ if [ "$n_archived" -gt 0 ]; then
 else
   printf '[%s] nothing new to archive\n' "$stamp" >>"$RUNLOG"
 fi
+# Single machine-readable result line on stdout: this is the whole contract
+# for callers (autopilot's log capture, an MCP wrapper). Everything else goes
+# to the run log or stderr.
+printf 'archived=%s\n' "$n_archived"

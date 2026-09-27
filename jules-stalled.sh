@@ -152,6 +152,7 @@ printf '%s\n' "$next_json" >"$SEEN"
 
 [ -n "${acted}${escalated}${failed}${held}" ] || {
   printf '[%s] nothing stalled beyond %sh\n' "$stamp" "$HOURS" >>"$LOG"
+  printf 'nudged=0 escalated=0 failed=0\n'
   exit 0
 }
 
@@ -165,3 +166,7 @@ body=''
 printf '[%s]\n%s' "$stamp" "$body" >>"$LOG"
 notify ":hourglass_flowing_sand: Jules stalled-session sweep (${stamp}):
 ${body}"
+# Single machine-readable result line on stdout — the caller-facing contract
+# (autopilot log capture, MCP wrapper). Detail lives in the log and Slack.
+printf 'nudged=%s escalated=%s failed=%s\n' \
+  "$n_acted" "$(grep -c . <<<"$escalated" || true)" "$(grep -c . <<<"$failed" || true)"

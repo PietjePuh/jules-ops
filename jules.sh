@@ -23,17 +23,20 @@ fi
 command -v jq >/dev/null || { echo "jules: jq is required" >&2; exit 2; }
 
 # api <METHOD> <path> [json-body]
+# The key travels via curl -K on a process-substitution fd, never on the
+# command line: argv is world-readable in /proc for the life of each call,
+# which under a long-lived MCP host means near-constant exposure.
 api() {
   local method="$1" path="$2" body="${3:-}" code tmp out
   tmp="$(mktemp)"
   if [ -n "$body" ]; then
     code="$(curl -sS -o "$tmp" -w '%{http_code}' -X "$method" \
-      -H "x-goog-api-key: ${JULES_API_KEY}" \
+      -K <(printf 'header = "x-goog-api-key: %s"\n' "$JULES_API_KEY") \
       -H 'Content-Type: application/json' \
       -d "$body" "${BASE}${path}")"
   else
     code="$(curl -sS -o "$tmp" -w '%{http_code}' -X "$method" \
-      -H "x-goog-api-key: ${JULES_API_KEY}" "${BASE}${path}")"
+      -K <(printf 'header = "x-goog-api-key: %s"\n' "$JULES_API_KEY") "${BASE}${path}")"
   fi
   out="$(cat "$tmp")"
   rm -f "$tmp"
