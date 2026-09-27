@@ -17,14 +17,12 @@ coding agent, from the nova host. Secrets are resolved at run time from
 | `jules-unblock.sh` | Manual nudge for specific session ids |
 | `jules-heartbeat.sh` | Weekly proof of life, so silence means idle and not dead |
 | `jules-prs.sh` | Counts, groups, readies and closes open Jules PRs |
-| `jules-rotate.sh` | Starts sessions on every eligible repo each pass (pinned repos first), up to the live 100/day quota |
+| `jules-rotate.sh` | Starts sessions on every eligible repo each pass, up to the live 100/day quota |
 | `jules-archive.sh` | Archives every completed/failed session's prompt + outcome + PR link to `jules-history.jsonl` |
 | `jules-autopilot.sh` | One unattended pass for any fleet host: sweep, then rotate (rotate.sh self-limits to the daily quota), then archive |
 | `jules-status.sh` | Read-only snapshot for the scheduled run: job logs, escalated/held sessions, PR backlog, rotation position |
 | `with-secrets.sh` | Sources the fleet op service-account env file, then execs the real job (for cron's empty environment) |
-| `repos.priority` | Rotation order for scheduled work, highest value first |
-| `repos.pinned` | Repos guaranteed a slot every pass, before round-robin, at a higher open-PR ceiling — so the busiest repo (Toolbelt) never waits behind 13 others |
-| `repos.allow` | Fail-closed allowlist of repos a session may be created against |
+| `repos.allow` | Fail-closed allowlist AND rotation order (top = first pick; fallback repos last) |
 | `prompts/` | Persona prompts: sentinel, palette, bolt — all forbid asking |
 
 ## Secrets
@@ -98,8 +96,8 @@ holds.
   reported once. Two attempts per unchanged `updateTime`, then one escalation to
   Slack and no further retries until the session actually moves.
 - `jules.sh new` refuses any repo absent from `repos.allow`, and refuses outright
-  if that file is missing. `repos.priority` must stay a subset of it, or rotation
-  will pick a repo the guard then rejects.
+  if that file is missing. That same file is the rotation order, so the guard
+  and the rotation can no longer drift apart.
 - Session titles and activity text are written by Jules, not by us, so control
   characters are stripped before that text reaches Slack or a triage report.
 - Jules opens its pull requests as drafts. A draft runs no workflows, so an
@@ -144,7 +142,7 @@ The structurally safer alternative is to open a fresh PR from a branch Jules has
 no session for, and close theirs.
 - An archived repository is read-only: pull requests cannot be closed or merged
   and workflows do not run. `AI`, `Main` and `ract` were archived and have been
-  dropped from `repos.priority` and `repos.allow`. Unarchive them on GitHub
+  dropped from `repos.allow`. Unarchive them on GitHub
   before adding them back.
 - The sessions endpoint caps a page at 100 and the account holds several hundred
   sessions, so a single request silently hides the rest. `jules.sh ls` pages

@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
-# Start Jules sessions on every eligible repo in repos.priority, rotating the
-# three agent personas, up to the account's daily session-creation quota.
-# Skips a repo that already has a live or stalled session so work never piles
-# up behind an unanswered question, and skips a repo over the open-PR cap so
-# recurring agents don't stack duplicate work on top of a review backlog.
+# Start Jules sessions on every eligible repo in repos.allow (file order =
+# rotation order, fallback repos last), rotating the three agent personas, up
+# to the account's daily session-creation quota. Skips a repo that already has
+# a live or stalled session so work never piles up behind an unanswered
+# question, and skips a repo over the open-PR cap so recurring agents don't
+# stack duplicate work on top of a review backlog.
 #
 # Was: start at most one session per invocation ("nightly"). Changed
 # 25/09/2026 (Tim: "make sure jules gets 100 tasks every day... use jules
@@ -13,12 +14,9 @@
 # this every 30 min now does the saturating; this script just stops safely
 # short of the account cap so a chatty pass never trips a Jules-side lockout.
 #
-# Pinned repos (repos.pinned) get first pick every pass, before the
-# round-robin cursor runs, at a higher open-PR ceiling (JULES_PINNED_MAX_OPEN_PRS,
-# default 8 vs the normal 5). Added same day (Tim: "jules needs to keep the
-# most active repo alive and updating to next versions") — spreading the full
-# daily budget across all 14 repos.priority entries risked starving the
-# busiest one behind 13 others each getting a turn first.
+# 27/09/2026: repos.priority and repos.pinned removed (Tim) — repos.allow is
+# now the single list. Pinning is moot when every pass walks every eligible
+# repo; there is nothing to starve.
 set -euo pipefail
 
 DIR="${JULES_OPS_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
@@ -51,12 +49,10 @@ BUSY='QUEUED PLANNING IN_PROGRESS AWAITING_USER_FEEDBACK AWAITING_PLAN_APPROVAL 
 DAILY_LIMIT="${JULES_DAILY_LIMIT:-100}"
 DAILY_SAFETY_MARGIN="${JULES_DAILY_SAFETY_MARGIN:-5}"
 MAX_OPEN_PRS="${JULES_MAX_OPEN_PRS:-5}"
-PINNED_MAX_OPEN_PRS="${JULES_PINNED_MAX_OPEN_PRS:-8}"
 
 stamp="$(date -u '+%d/%m/%Y %H:%M:%S UTC')"
-mapfile -t REPOS < <(grep -vE '^\s*(#|$)' "${DIR}/repos.priority")
-[ "${#REPOS[@]}" -gt 0 ] || { echo "jules-rotate: repos.priority is empty" >&2; exit 2; }
-mapfile -t PINNED < <([ -f "${DIR}/repos.pinned" ] && grep -vE '^\s*(#|$)' "${DIR}/repos.pinned" || true)
+mapfile -t REPOS < <(grep -vE '^\s*(#|$)' "${DIR}/repos.allow")
+[ "${#REPOS[@]}" -gt 0 ] || { echo "jules-rotate: repos.allow is empty" >&2; exit 2; }
 
 i="$(cat "$CURSOR" 2>/dev/null || echo 0)"
 p="$(cat "$PERSONA_CURSOR" 2>/dev/null || echo 0)"
@@ -125,13 +121,7 @@ try_start() {
   return 1
 }
 
-# --- 1. pinned repos first, every pass, at the higher PR ceiling ---
-for repo in "${PINNED[@]}"; do
-  [ "$budget" -gt 0 ] || break
-  try_start "$repo" "$PINNED_MAX_OPEN_PRS" || true
-done
-
-# --- 2. round-robin the rest of repos.priority with whatever budget remains ---
+# --- round-robin repos.allow with the day's remaining budget ---
 attempts=0
 while [ "$budget" -gt 0 ] && [ "$attempts" -lt "${#REPOS[@]}" ]; do
   repo="${REPOS[$((i % ${#REPOS[@]}))]}"

@@ -1,17 +1,22 @@
-# Repos a session may be started against by anything in this repo.
+# Repos a session may be started against by anything in this repo, AND the
+# rotation order for scheduled work (top = first pick each pass).
 # Fail-closed: jules.sh refuses to create a session for a repo not listed
 # here, and refuses entirely if this file is missing. Owner is implied.
 # Deliberately excluded: 1password-toolkit, fleet-topology, docker-configs,
 # and any repo where an unreviewed agent commit is expensive to unwind.
-# Removed 20/09/2026 as archived and therefore read-only: AI, Main, ract.
+#
+# 27/09/2026: repos.priority and repos.pinned deleted (Tim) — this is the
+# single list now. Pinning was moot once jules-rotate started walking every
+# eligible repo each pass.
 #
 # Narrowed 25/09/2026 (Tim, verbatim): "keep omarchy-toolbelt and toolbelt
 # and airplanesole not te rest and dotfiles and if creadits are over to
 # work on the rock-city-spot [rork-cityspot-finder]". Removed: dotfiles,
 # nova-mcp, toolbelt-next, N8N---SOC-Workflows, zero-trust, TI, N8n, brain,
 # poncraft, toolbelt-mobile, BackgroundRemoval — all explicitly out of
-# scope now, do not add back without Tim saying so again. Added
-# rork-cityspot-finder as the fallback repo for leftover daily budget.
+# scope now, do not add back without Tim saying so again.
+# rork-cityspot-finder last = fallback: it only gets budget left over after
+# the focus repos are busy or at their open-PR ceiling in a pass.
 
 omarchy-toolbelt
 Toolbelt

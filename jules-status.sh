@@ -42,5 +42,5 @@ sec "open Jules pull requests"
 sec "rotation position"
 printf '  cursor=%s  next=%s\n' \
   "$(cat "${DIR}/rotate-cursor" 2>/dev/null || echo 0)" \
-  "$(grep -vE '^[[:space:]]*(#|$)' "${DIR}/repos.priority" \
-     | sed -n "$((($(cat "${DIR}/rotate-cursor" 2>/dev/null || echo 0) % $(grep -cvE '^[[:space:]]*(#|$)' "${DIR}/repos.priority")) + 1))p")"
+  "$(grep -vE '^[[:space:]]*(#|$)' "${DIR}/repos.allow" \
+     | sed -n "$((($(cat "${DIR}/rotate-cursor" 2>/dev/null || echo 0) % $(grep -cvE '^[[:space:]]*(#|$)' "${DIR}/repos.allow")) + 1))p")"
