@@ -1,15 +1,37 @@
-# Auto-land pipeline: ready -> merge, with no human in the loop.
+# Auto-land pipeline: ready -> merge, with no human in the loop, EXCEPT on the
+# control surfaces listed below.
 #
 # Three jobs, same guards everywhere:
 #   auto-ready  (schedule) flip a green draft to ready-for-review
 #   auto-merge  (workflow_run) merge the PR whose CI just went green
 #   sweep       (schedule) drain any green PR the event path stranded
 #
-# Guards (identical on every path, none of them weaker than the others):
+# Guards (identical on every merge path, none of them weaker than the others):
 #   * not labelled `no-auto-merge`      -> the do-not-land opt-out
 #   * not labelled `keep-draft`         -> auto-ready only; keeps a WIP a draft
 #   * at least one check ran, and every check is SUCCESS / NEUTRAL / SKIPPED
 #   * mergeStateStatus == CLEAN         -> resolved per-PR, see the note in sweep
+#   * touches no control surface        -> see CONTROL SURFACES below
+#
+# CONTROL SURFACES: WHY CI-GREEN IS NOT ENOUGH FOR EVERY FILE
+# ci.yml runs on `pull_request`, which checks out the PR's OWN copy of ci.yml.
+# A PR that appends `1password-toolkit` to repos.allow and deletes the
+# "Deliberately excluded repos stay excluded" step in the same commit goes green
+# against the gate it just weakened. Normally a required status check plus a
+# review on `.github/**` would close that, but jules-ops is private on a free
+# plan: rulesets and required checks are unavailable (`gh api .../rulesets` ->
+# "Upgrade to GitHub Pro or make this repository public"). So the lander itself
+# has to be narrow.
+#
+# These paths never auto-merge; a human merges them:
+#   repos.allow          the fail-closed allowlist -- what Jules may write to
+#   repos.priority       what Jules picks up, and in what order
+#   prompts/             the personas that constrain every Jules session
+#   .github/workflows/   the gate this job trusts, and this job itself
+#
+# Everything else -- dispatch logs, briefs, scripts, docs -- lands unattended,
+# which is the point. (auto-ready still promotes a green control-surface draft,
+# so it is visible and one click from landing. It just will not land itself.)
 #
 # WHY GH_TOKEN IS SET EXPLICITLY ON EVERY STEP
 # The Toolbelt copy of this file omitted GH_TOKEN on its schedule jobs and
@@ -74,6 +96,16 @@ jobs:
           # auto-ready job below is what promotes it. Skip cleanly.
           if [ "$(gh pr view "$PR" --repo "$REPO" --json isDraft --jq '.isDraft')" = "true" ]; then
             echo "PR #$PR is a draft, leaving it for auto-ready"
+            exit 0
+          fi
+          # Control-surface guard -- see CONTROL SURFACES at the top of this file.
+          # Fail closed: an unavailable or empty file list is treated as a hit,
+          # because "I could not tell what this PR touches" must not mean "land
+          # it". `--json files` returns at most 100 paths; a PR that large is not
+          # an unattended-land candidate anyway.
+          FILES=$(gh pr view "$PR" --repo "$REPO" --json files --jq '.files[].path') || FILES=''
+          if [ -z "$FILES" ] || printf '%s\n' "$FILES" | grep -qE '^(repos\.allow|repos\.priority|prompts/|\.github/workflows/)'; then
+            echo "PR #$PR touches a control surface (or its file list is unavailable) -- a human merges this one"
             exit 0
           fi
           echo "Merging PR #$PR"
@@ -145,6 +177,14 @@ jobs:
             MSS=$(gh pr view "$n" --repo "$REPO" --json mergeStateStatus --jq '.mergeStateStatus')
             if [ "$MSS" != "CLEAN" ]; then
               echo "Skipping PR #$n (mergeStateStatus=$MSS, not CLEAN)"
+              continue
+            fi
+            # Control-surface guard -- identical to the auto-merge job's, so the
+            # sweep cannot land what the event path refused. See CONTROL SURFACES
+            # at the top of this file. Fail closed on an unavailable file list.
+            FILES=$(gh pr view "$n" --repo "$REPO" --json files --jq '.files[].path') || FILES=''
+            if [ -z "$FILES" ] || printf '%s\n' "$FILES" | grep -qE '^(repos\.allow|repos\.priority|prompts/|\.github/workflows/)'; then
+              echo "Skipping PR #$n (touches a control surface -- a human merges this one)"
               continue
             fi
             echo "Sweeping green PR #$n"
