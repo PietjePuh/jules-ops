@@ -17,14 +17,22 @@ coding agent, from the nova host. Secrets are resolved at run time from
 | `jules-unblock.sh` | Manual nudge for specific session ids |
 | `jules-heartbeat.sh` | Weekly proof of life, so silence means idle and not dead |
 | `jules-prs.sh` | Counts, groups, readies and closes open Jules PRs |
-| `jules-rotate.sh` | Nightly: starts one session on the next repo, rotating personas |
-| `jules-autopilot.sh` | One unattended pass for any fleet host: sweep, then at most one new session per day fleet-wide |
+| `jules-rotate.sh` | Starts sessions on every eligible repo each pass, up to the live 100/day quota |
+| `jules-archive.sh` | Archives every completed/failed session's prompt + outcome + PR link to `jules-history.jsonl` |
+| `jules-autopilot.sh` | One unattended pass for any fleet host: sweep, then rotate (rotate.sh self-limits to the daily quota), then archive |
 | `jules-status.sh` | Read-only snapshot for the scheduled run: job logs, escalated/held sessions, PR backlog, rotation position |
 | `with-secrets.sh` | Sources the fleet op service-account env file, then execs the real job (for cron's empty environment) |
-| `repos.priority` | Rotation order for scheduled work, highest value first |
-| `repos.allow` | Fail-closed allowlist of repos a session may be created against |
+| `repos.allow` | Fail-closed allowlist AND rotation order (top = first pick; fallback repos last) |
 | `prompts/` | Persona prompts: sentinel, palette, bolt — all forbid asking, all carry the v2 surface freeze |
 | `DISPATCH-RANKING.md` | How Dispatch ranks backlog items; the active v2 surface freeze and what it blocks |
+
+
+## Working in this repo
+
+More than one agent works here at once. Each has its own git work tree under
+`~/github/.worktrees/<agent>/jules-ops`; `~/github/jules-ops` stays on `main` and
+is for reading. See [WORKTREES.md](WORKTREES.md) — sharing one checkout silently
+swapped `repos.allow` under a running dispatch on 24/09/2026.
 
 ## Secrets
 
@@ -63,8 +71,14 @@ task reads it.
 45 4  * * * jules-triage.sh       # stalled-session report
 50 4  * * 1 jules-heartbeat.sh    # weekly, lands in the same window
 0 */3 * * * jules-stalled.sh      # sweep through the day
-0 23  * * * jules-rotate.sh       # one session on the next repo
 ```
+
+Note (2026-09-25): on fastbelt none of the above are in an active crontab or
+systemd timer — `jules-autopilot.timer` (every 15 min) now runs sweep, rotate,
+and archive as one pass and supersedes the old `jules-stalled.sh`/`jules-rotate.sh`
+lines above. `jules-watch-cron.sh`/`jules-triage.sh`/`jules-heartbeat.sh` are
+not wired into anything active on this host — check nova before assuming this
+block is live anywhere.
 
 All output appends to `cron.log`, never `/dev/null`. When CET returns in October
 the task moves to 06:00 UTC and the gap widens by an hour; the ordering still
@@ -91,8 +105,8 @@ holds.
   reported once. Two attempts per unchanged `updateTime`, then one escalation to
   Slack and no further retries until the session actually moves.
 - `jules.sh new` refuses any repo absent from `repos.allow`, and refuses outright
-  if that file is missing. `repos.priority` must stay a subset of it, or rotation
-  will pick a repo the guard then rejects.
+  if that file is missing. That same file is the rotation order, so the guard
+  and the rotation can no longer drift apart.
 - Session titles and activity text are written by Jules, not by us, so control
   characters are stripped before that text reaches Slack or a triage report.
 - Jules opens its pull requests as drafts. A draft runs no workflows, so an
@@ -137,7 +151,7 @@ The structurally safer alternative is to open a fresh PR from a branch Jules has
 no session for, and close theirs.
 - An archived repository is read-only: pull requests cannot be closed or merged
   and workflows do not run. `AI`, `Main` and `ract` were archived and have been
-  dropped from `repos.priority` and `repos.allow`. Unarchive them on GitHub
+  dropped from `repos.allow`. Unarchive them on GitHub
   before adding them back.
 - The sessions endpoint caps a page at 100 and the account holds several hundred
   sessions, so a single request silently hides the rest. `jules.sh ls` pages
@@ -150,7 +164,14 @@ no session for, and close theirs.
   repo is already over the limit is reported as held rather than nudged, because
   answering it produces another pull request into a repo that cannot absorb one.
   The session's repo is cached in the state file so the backlog is not
-  re-resolved on every run.
+  re-resolved on every run. `jules-stalled.sh` defaults to the same limit as
+  rotation (5; overridable with `JULES_MAX_OPEN_PRS`).
+- A session that reaches `COMPLETED` while holding an unshipped diff (usually
+  halted mid-task by a hold instruction) is invisible to every other sweep
+  state, so `jules-stalled.sh` wakes such a session once with the standard
+  unblock message — shipping the held diff is then its task. Woken sessions are
+  recorded in `stalled-seen.json` with `woken: true` and never re-woken; a
+  session that was held stays held until its repo drops below the limit.
 - `JULES_NOTIFY` selects the channel: `log` (default) appends alerts to
   `notify.log`, `slack` posts through the webhook, `off` discards them. The
   scheduled task is the notification channel, so alerts are written where it

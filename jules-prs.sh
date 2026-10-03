@@ -21,7 +21,7 @@ OWNER="${JULES_OWNER:-PietjePuh}"
 TOKEN_REF="${JULES_PR_TOKEN_REF:-op://Agentforce/leiormsiycti6p6mf4xmtyni44/PAT}"
 : "${GH_PAT:=$(op read "$TOKEN_REF")}"
 
-api() { curl -sS -H "Authorization: Bearer ${GH_PAT}" -H 'Accept: application/vnd.github+json' "$@"; }
+api() { curl -sS -K <(printf 'header = "Authorization: Bearer %s"\n' "$GH_PAT") -H 'Accept: application/vnd.github+json' "$@"; }
 
 # jules_prs <repo> -> number, draft, node_id, mergeable_state, title
 jules_prs() {

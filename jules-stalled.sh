@@ -6,6 +6,11 @@
 #   AWAITING_PLAN_APPROVAL  -> approve the plan
 #   AWAITING_USER_FEEDBACK  -> tell the agent to decide and ship
 #   FAILED                  -> report once, no action possible
+#   COMPLETED (rare)        -> one wake if it holds an unshipped diff (TIM-95):
+#                              a session halted by a hold instruction ("do NOT
+#                              open a PR yet") can reach COMPLETED with finished
+#                              work stranded, and no other state ever revisits
+#                              it. Woken once, never re-woken.
 # A session gets at most two attempts at the same updateTime; after that it is
 # escalated to Slack once and left alone until it actually moves.
 #
@@ -27,6 +32,12 @@ UNBLOCK_MSG='Pick the single highest-value item from the candidates you listed a
 
 stamp="$(date -u '+%d/%m/%Y %H:%M:%S UTC')"
 cutoff="$(date -u -d "-${HOURS} hours" '+%Y-%m-%dT%H:%M:%SZ')"
+
+# Single-flight guard: the 15-min timer and a Dispatch heartbeat can fire the
+# sweep in the same minute (25/09 20:45-20:49Z saw three overlapping passes);
+# double nudges burn Jules quota and corrupt seen/attempts state. Fail-closed.
+exec 9>"${DIR}/.jules-stalled.lock"
+flock -n 9 || exit 0
 
 if [ -n "${JULES_SESSIONS_SRC:-}" ]; then
   sessions="$(cat "${JULES_SESSIONS_SRC}")"
@@ -53,10 +64,15 @@ act() { # act <verb> <id> ; verb = approve | unblock
   esac
 }
 
-# Rotation refuses to start work on a repo that already has a pile of open PRs.
-# Answering a stalled session produces a PR too, so the same limit applies here —
-# otherwise the sweep quietly undoes the backpressure rotation enforces.
-MAX_OPEN_PRS="${JULES_MAX_OPEN_PRS:-3}"
+# Rotation refuses to START NEW work on a repo that already has a pile of
+# open PRs. A nudge to an ALREADY-RUNNING session cannot create a 4th PR on
+# top of the cap (the session's PR, if any, already exists) -- gating nudges
+# too only freezes work already in flight for no backpressure benefit, so
+# nudges are exempt (Tim, 2026-09-25, TIM-46). New-session starts still
+# respect the cap. Default mirrors rotation's JULES_MAX_OPEN_PRS (5); the
+# old default of 3 here created a phantom "3-open-PR cap" operators cited
+# when halting sessions.
+MAX_OPEN_PRS="${JULES_MAX_OPEN_PRS:-5}"
 over_limit="$("${DIR}/jules-prs.sh" list 2>/dev/null \
   | awk -v m="$MAX_OPEN_PRS" '{n=$2; sub(/^open=/,"",n); if (n+0 >= m) print $1}')"
 
@@ -75,7 +91,7 @@ acted='' ; escalated='' ; failed='' ; n_acted=0
 
 while IFS=$'\t' read -r id state updated title; do
   [ -n "${id:-}" ] || continue
-  case "$state" in AWAITING_USER_FEEDBACK|AWAITING_PLAN_APPROVAL|FAILED) ;; *) continue ;; esac
+  case "$state" in AWAITING_USER_FEEDBACK|AWAITING_PLAN_APPROVAL|FAILED|COMPLETED) ;; *) continue ;; esac
   [[ "$updated" < "$cutoff" ]] || continue
 
   prev="$(jq -c --arg i "$id" '.[$i] // {}' <<<"$prev_json")"
@@ -99,29 +115,44 @@ while IFS=$'\t' read -r id state updated title; do
   fi
 
   repo="$(session_repo "$id")"
-  if [ -n "${repo:-}" ] && grep -qxF "$repo" <<<"$over_limit"; then
-    held+="  ${repo}  ${id}  ${title}"$'\n'
-    next_json="$(jq -c --arg i "$id" --arg u "$updated" --arg r "$repo" --argjson a "$attempts" \
-      '.[$i] = {updated: $u, attempts: $a, repo: $r, held: true}' <<<"$next_json")"
-    continue
-  fi
+  # NOTE: nudging/approving an ALREADY-RUNNING stalled session is exempt from
+  # MAX_OPEN_PRS (Tim, 2026-09-25, TIM-46) — the session's own PR, if any,
+  # already exists, so holding it here only freezes in-flight work with no
+  # backpressure benefit. over_limit is still computed above and still
+  # gates NEW session starts in jules-rotate.sh / jules-autopilot.sh.
 
   verb=unblock
   [ "$state" != AWAITING_PLAN_APPROVAL ] || verb=approve
+  if [ "$state" = COMPLETED ] \
+     && [ "$(jq -r '.woken // false' <<<"$prev")" = "true" ]; then
+    # Wake a completed session at most once ever: a completed session treats a
+    # new message as a NEW task, so re-waking on every pass would turn this
+    # sweep into a work generator. The woken flag is written by the tail state
+    # update below and deliberately survives updateTime changes.
+    next_json="$(jq -c --arg i "$id" --arg u "$updated" \
+      --arg r "$(jq -r '.repo // ""' <<<"$prev")" --argjson a "$attempts" \
+      '.[$i] = {updated: $u, attempts: $a, repo: $r, woken: true}' <<<"$next_json")"
+    continue
+  fi
+  woken=false
   if act "$verb" "$id"; then
     attempts=$((attempts + 1)); n_acted=$((n_acted + 1))
     [ "$n_acted" -gt 10 ] || acted+="  ${verb}  ${id}  ${title}"$'\n'
+    # a COMPLETED session is woken at most once: mark it only after a
+    # successful send, so a failed wake retries on the next pass
+    [ "$state" != COMPLETED ] || woken=true
   else
     escalated+="  ${state} (${verb} failed)  ${id}  ${title}"$'\n'
   fi
-  next_json="$(jq -c --arg i "$id" --arg u "$updated" --arg r "${repo:-}" --argjson a "$attempts" \
-    '.[$i] = {updated: $u, attempts: $a, repo: $r}' <<<"$next_json")"
+  next_json="$(jq -c --arg i "$id" --arg u "$updated" --arg r "${repo:-}" --argjson a "$attempts" --argjson w "$woken" \
+    '.[$i] = {updated: $u, attempts: $a, repo: $r} + (if $w then {woken: true} else {} end)' <<<"$next_json")"
 done <<<"$sessions"
 
 printf '%s\n' "$next_json" >"$SEEN"
 
 [ -n "${acted}${escalated}${failed}${held}" ] || {
   printf '[%s] nothing stalled beyond %sh\n' "$stamp" "$HOURS" >>"$LOG"
+  printf 'nudged=0 escalated=0 failed=0\n'
   exit 0
 }
 
@@ -135,3 +166,7 @@ body=''
 printf '[%s]\n%s' "$stamp" "$body" >>"$LOG"
 notify ":hourglass_flowing_sand: Jules stalled-session sweep (${stamp}):
 ${body}"
+# Single machine-readable result line on stdout — the caller-facing contract
+# (autopilot log capture, MCP wrapper). Detail lives in the log and Slack.
+printf 'nudged=%s escalated=%s failed=%s\n' \
+  "$n_acted" "$(grep -c . <<<"$escalated" || true)" "$(grep -c . <<<"$failed" || true)"

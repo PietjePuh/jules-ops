@@ -4,13 +4,17 @@
 #
 #   1. sweep: approve pending plans, nudge waiting sessions, escalate stuck ones
 #      (delegates to jules-stalled.sh, which owns the attempt/escalation state)
-#   2. rotate: at most ONE new persona session per day fleet-wide. Detected via
-#      the Jules API itself — if any Sentinel/Palette/Bolt session started in the
-#      last 24h (by nova's nightly job or another host), nothing new is started.
-#      This keeps fastbelt and nova from double-seeding the pipeline.
+#   2. rotate: start Jules sessions on every eligible repo this pass, up to the
+#      account's 100 sessions/day quota (jules-rotate.sh reads the live count
+#      from the API and self-limits — no more local "once per day" gate here).
+#      Safe to call from multiple hosts concurrently: the quota check is
+#      API-truth, not a local file, so fastbelt and nova never double-spend it.
+#   3. archive: append every newly-COMPLETED/FAILED session's prompt + outcome
+#      + linked PR to jules-history.jsonl (jules-archive.sh owns its own
+#      archived-seen.json dedup state, cheap after the first run — it only
+#      does real work for sessions that are new since the last pass).
 #
-#   env: JULES_AUTOPILOT_FORCE_START=1  start even if one ran in the last 24h
-#        JULES_NOTIFY=off               default: alerts go to notify.log
+#   env: JULES_NOTIFY=off               default: alerts go to notify.log
 #        JULES_OPS_DIR                  override the checkout dir
 set -uo pipefail
 
@@ -42,25 +46,18 @@ else
   log "sweep FAILED: $(head -c 300 <<<"$out" | tr '\n' ' ')"
 fi
 
-# --- 2. rotate (once per day, fleet-wide via API state) ---
-already=0
-if [ "${JULES_AUTOPILOT_FORCE_START:-0}" != "1" ]; then
-  cutoff="$(date -u -d '-24 hours' '+%Y-%m-%dT%H:%M:%SZ')"
-  # Capture fully, then grep: with pipefail, `grep -q` exiting early SIGPIPEs
-  # the upstream jules.sh (still paging) and the pipeline reads as "no match".
-  recent="$("${DIR}/jules.sh" ls 500 2>/dev/null | awk -F'\t' -v c="$cutoff" '$3 >= c' || true)"
-  if grep -qE '(Sentinel|Palette|Bolt): ' <<<"$recent"; then
-    already=1
-    log "rotate skipped: a persona session already started in the last 24h"
-  fi
+# --- 2. rotate (self-limits to the daily quota via live API count) ---
+if out="$("${DIR}/jules-rotate.sh" 2>&1)"; then
+  log "rotate ok: $(head -c 300 <<<"$out" | tr '\n' ' ')"
+else
+  log "rotate FAILED: $(head -c 300 <<<"$out" | tr '\n' ' ')"
 fi
 
-if [ "$already" = "0" ]; then
-  if out="$("${DIR}/jules-rotate.sh" 2>&1)"; then
-    log "rotate ok: $(head -c 200 <<<"$out" | tr '\n' ' ')"
-  else
-    log "rotate FAILED: $(head -c 300 <<<"$out" | tr '\n' ' ')"
-  fi
+# --- 3. archive (bounded cost: only new terminal-state sessions do real work) ---
+if out="$("${DIR}/jules-archive.sh" 2>&1)"; then
+  log "archive ok: $(head -c 200 <<<"$out" | tr '\n' ' ')"
+else
+  log "archive FAILED: $(head -c 300 <<<"$out" | tr '\n' ' ')"
 fi
 
 log "=== autopilot pass end ==="
