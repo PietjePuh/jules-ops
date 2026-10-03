@@ -1,0 +1,93 @@
+{
+  "paperclip_api": "http://127.0.0.1:3100/api",
+  "company_id": "57374ce9-1fb8-43ca-b860-57526b685958",
+  "repos": ["PietjePuh/Toolbelt", "PietjePuh/omarchy-toolbelt"],
+  "min_active_cards_per_repo": 3,
+  "refill_assignee_pool": [
+    "04de0a44-e448-4925-b1a0-b782afb576c9",
+    "f593cf64-56e3-4fdc-af2b-f710b4bf2cae",
+    "030731bd-4340-4a6d-858b-40d14ad5792b",
+    "af0c38a4-d3a8-4843-b07c-645c7f5951ac"
+  ],
+  "agents": [
+    {
+      "id": "cd8afe34-73a8-41f8-9347-ba4ab2ceca7c",
+      "name": "Chief (AI oriscator)",
+      "model": "glm-4.6",
+      "provider": "zai",
+      "heartbeat": true,
+      "budget_cents": 10000,
+      "note": "org-level manager for agents/bots/kanban; had NO model field until 2026-10-03"
+    },
+    {
+      "id": "a2c1d552-24e4-4ff3-8bca-3c8ea7feb9db",
+      "name": "Dispatch 2",
+      "model": "claude-sonnet-5",
+      "provider": "anthropic",
+      "heartbeat": true,
+      "budget_cents": 10000,
+      "note": "Jules dispatcher/manager"
+    },
+    {
+      "id": "ef3261e8-eb33-4194-89b6-92a2022bd851",
+      "name": "Relay 2",
+      "model": "claude-sonnet-5",
+      "provider": "anthropic",
+      "heartbeat": true,
+      "budget_cents": 10000,
+      "note": "GitHub PR finisher/manager"
+    },
+    {
+      "id": "030731bd-4340-4a6d-858b-40d14ad5792b",
+      "name": "GLM Runner",
+      "model": "glm-4.6",
+      "provider": "zai",
+      "heartbeat": true,
+      "budget_cents": null,
+      "note": "model was 'Glm 5.3 Flash' (badly cased) -> hermes silently fell back to glm-5.3-flash; fixed 2026-10-03"
+    },
+    {
+      "id": "af0c38a4-d3a8-4843-b07c-645c7f5951ac",
+      "name": "Nexus",
+      "model": "glm-5.3-flash",
+      "provider": "zai",
+      "heartbeat": true,
+      "budget_cents": null,
+      "note": "heartbeat/recovery lane, TIM-139"
+    },
+    {
+      "id": "04de0a44-e448-4925-b1a0-b782afb576c9",
+      "name": "Gemini Runner",
+      "model": "gemini-3.8-flash-medium",
+      "provider": "",
+      "heartbeat": true,
+      "budget_cents": null
+    },
+    {
+      "id": "f593cf64-56e3-4fdc-af2b-f710b4bf2cae",
+      "name": "Gemini Runner 2",
+      "model": "gemini-3.8-flash-medium",
+      "provider": "",
+      "heartbeat": true,
+      "budget_cents": null
+    },
+    {
+      "id": "686650c6-5f76-474c-a2b3-e3a433758261",
+      "name": "Fable",
+      "model": "claude-fable-5-1",
+      "provider": "",
+      "heartbeat": false,
+      "budget_cents": 5000,
+      "note": "most expensive model in the fleet; on-demand only by design, do not auto-heartbeat"
+    },
+    {
+      "id": "a589b264-bc02-4bf0-a201-493300ee905f",
+      "name": "Relic",
+      "model": "claude-fable-5-1",
+      "provider": "",
+      "heartbeat": false,
+      "budget_cents": 5000,
+      "note": "same model as Fable; on-demand only by design"
+    }
+  ]
+}

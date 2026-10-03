@@ -25,6 +25,19 @@ coding agent, from the nova host. Secrets are resolved at run time from
 | `repos.allow` | Fail-closed allowlist AND rotation order (top = first pick; fallback repos last) |
 | `prompts/` | Persona prompts: sentinel, palette, bolt — all forbid asking |
 
+## Watchdogs (`watchdog/`)
+
+Two systemd user timers guard the Paperclip agent fleet. Different failure
+classes, don't merge them:
+
+| Script | Timer | Catches |
+| --- | --- | --- |
+| `agent-watchdog.sh` | every 10min | Provider account lockouts (status=error): hires a replacement on the next provider in the fallback ring, pauses the original, reassigns its open issues. |
+| `board-health-watchdog.sh` | every 20min | Silent config drift on status=idle/running agents: a model string hermes/claude didn't recognize but didn't error on either (proven 2026-10-03: `hermes -m "Glm 5.3 Flash" --provider zai` silently answers as the generic fallback model `glm-5.3-flash` instead of erroring — same for a garbled or missing model field entirely), heartbeat/budget settings that got reset, and a kanban board that drained to zero backlog for Toolbelt/omarchy-toolbelt with nobody refilling it. Config-driven via `board-health-config.json` — edit that file when the fleet roster changes, not the script. Never auto-resumes a manually-paused agent (cost decision, human-only) and never touches status=error (that's agent-watchdog.sh's job). |
+
+Manual run: `./watchdog/<script>.sh`. Dry run: `*_DRYRUN=1 ./watchdog/<script>.sh`.
+Logs: `watchdog/*.log`. Alerts go through `notify.sh` same as every other job.
+
 ## Working in this repo
 
 More than one agent works here at once. Each has its own git work tree under
