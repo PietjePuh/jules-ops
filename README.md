@@ -23,7 +23,9 @@ coding agent, from the nova host. Secrets are resolved at run time from
 | `jules-status.sh` | Read-only snapshot for the scheduled run: job logs, escalated/held sessions, PR backlog, rotation position |
 | `with-secrets.sh` | Sources the fleet op service-account env file, then execs the real job (for cron's empty environment) |
 | `repos.allow` | Fail-closed allowlist AND rotation order (top = first pick; fallback repos last) |
-| `prompts/` | Persona prompts: sentinel, palette, bolt — all forbid asking |
+| `prompts/` | Persona prompts: sentinel, palette, bolt — all forbid asking, all carry the v2 surface freeze |
+| `DISPATCH-RANKING.md` | How Dispatch ranks backlog items; the active v2 surface freeze and what it blocks |
+
 
 ## Watchdogs (`watchdog/`)
 
