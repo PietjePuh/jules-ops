@@ -15,6 +15,7 @@
 # escalated to Slack once and left alone until it actually moves.
 #
 #   env: JULES_STALL_HOURS      idle threshold, default 4
+#        JULES_STALL_MAX_ACTIONS  max candidates acted on per pass, default 20
 #        JULES_DRYRUN_ACTIONS=1 print actions instead of performing them
 #        JULES_NOTIFY_DRYRUN=1  print the Slack payload instead of posting
 #        JULES_SESSIONS_SRC     read the session TSV from this file (testing)
@@ -29,6 +30,16 @@ SEEN="${JULES_STALL_SEEN:-${DIR}/stalled-seen.json}"
 LOG="${DIR}/jules-stalled.log"
 MAX_ATTEMPTS=2
 UNBLOCK_MSG='Pick the single highest-value item from the candidates you listed and implement it now. Do not ask any further questions and do not present options. Run the repository lint and test commands, then open a pull request. If none of the candidates qualifies, stop without opening a pull request.'
+
+# Persist seen-state incrementally (TIM-289): the pre-fix loop wrote $SEEN only
+# AFTER the whole walk, so a pass killed by the unit timeout (TimeoutStartSec=
+# 600) lost all progress and every 15-min pass re-walked the same backlog
+# forever — stalled-seen.json mtime sat at 27/09 while passes kept dying.
+# Atomic tmp+mv snapshot after each state-changing iteration survives a TERM;
+# the final full write below stays as the loop-completed correction.
+persist_seed() {
+  printf '%s\n' "$next_json" >"${SEEN}.tmp" && mv -f "${SEEN}.tmp" "$SEEN"
+}
 
 stamp="$(date -u '+%d/%m/%Y %H:%M:%S UTC')"
 cutoff="$(date -u -d "-${HOURS} hours" '+%Y-%m-%dT%H:%M:%SZ')"
@@ -85,9 +96,14 @@ session_repo() {
 }
 
 prev_json="$(cat "$SEEN" 2>/dev/null || echo '{}')"
-next_json='{}'
+next_json="$prev_json"
 held=''
 acted='' ; escalated='' ; failed='' ; n_acted=0
+
+# Per-pass action cap (TIM-289): bound each pass to a slice of the backlog so
+# a pass fits the unit timeout even against a slow API. Capped-out candidates
+# stay under-cutoff and surface on the next pass.
+MAX_ACTIONS="${JULES_STALL_MAX_ACTIONS:-20}"
 
 while IFS=$'\t' read -r id state updated title; do
   [ -n "${id:-}" ] || continue
@@ -103,6 +119,7 @@ while IFS=$'\t' read -r id state updated title; do
     [ "$prev_updated" = "$updated" ] || failed+="  FAILED  ${id}  ${title}"$'\n'
     next_json="$(jq -c --arg i "$id" --arg u "$updated" \
       '.[$i] = {updated: $u, attempts: 0}' <<<"$next_json")"
+    persist_seed
     continue
   fi
 
@@ -111,6 +128,23 @@ while IFS=$'\t' read -r id state updated title; do
       || escalated+="  ${state}  ${id}  ${title}"$'\n'
     next_json="$(jq -c --arg i "$id" --arg u "$updated" --argjson a "$attempts" \
       '.[$i] = {updated: $u, attempts: $a, escalated: true}' <<<"$next_json")"
+    persist_seed
+    continue
+  fi
+
+  # Per-pass cap (TIM-289): once MAX_ACTIONS candidates were acted on this
+  # pass, leave the rest untouched (no wake, no repo lookup, attempts
+  # unchanged) so they surface on the next pass. The check sits BEFORE
+  # session_repo() on purpose: a capped-out candidate must not cost an API
+  # round-trip. Live proof 05/10: the 06:40Z boot pass fetched repos for
+  # ~190 capped-out candidates (~3s each) and still hit the 600s guillotine
+  # with only ~200 of the ~450-entry backlog cached. The merge preserves
+  # woken/escalated/repo already on the entry; repo is fetched only for
+  # candidates actually acted on or held this pass.
+  if [ "$n_acted" -ge "$MAX_ACTIONS" ]; then
+    next_json="$(jq -c --arg i "$id" --arg u "$updated" --argjson a "$attempts" \
+      '.[$i] = ((.[$i] // {}) + {updated: $u, attempts: $a})' <<<"$next_json")"
+    persist_seed
     continue
   fi
 
@@ -123,6 +157,7 @@ while IFS=$'\t' read -r id state updated title; do
 
   verb=unblock
   [ "$state" != AWAITING_PLAN_APPROVAL ] || verb=approve
+
   if [ "$state" = COMPLETED ] \
      && [ "$(jq -r '.woken // false' <<<"$prev")" = "true" ]; then
     # Wake a completed session at most once ever: a completed session treats a
@@ -132,8 +167,10 @@ while IFS=$'\t' read -r id state updated title; do
     next_json="$(jq -c --arg i "$id" --arg u "$updated" \
       --arg r "$(jq -r '.repo // ""' <<<"$prev")" --argjson a "$attempts" \
       '.[$i] = {updated: $u, attempts: $a, repo: $r, woken: true}' <<<"$next_json")"
+    persist_seed
     continue
   fi
+
   woken=false
   if act "$verb" "$id"; then
     attempts=$((attempts + 1)); n_acted=$((n_acted + 1))
@@ -146,6 +183,7 @@ while IFS=$'\t' read -r id state updated title; do
   fi
   next_json="$(jq -c --arg i "$id" --arg u "$updated" --arg r "${repo:-}" --argjson a "$attempts" --argjson w "$woken" \
     '.[$i] = {updated: $u, attempts: $a, repo: $r} + (if $w then {woken: true} else {} end)' <<<"$next_json")"
+  persist_seed
 done <<<"$sessions"
 
 printf '%s\n' "$next_json" >"$SEEN"
