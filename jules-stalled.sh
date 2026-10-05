@@ -29,7 +29,10 @@ HOURS="${JULES_STALL_HOURS:-1}"
 SEEN="${JULES_STALL_SEEN:-${DIR}/stalled-seen.json}"
 LOG="${DIR}/jules-stalled.log"
 MAX_ATTEMPTS=2
-UNBLOCK_MSG='Pick the single highest-value item from the candidates you listed and implement it now. Do not ask any further questions and do not present options. Run the repository lint and test commands, then open a pull request. If none of the candidates qualifies, stop without opening a pull request.'
+# Answers are composed per-session by jules-answer.sh (reads the agent's
+# actual question: requirements -> issue body, credentials -> escalate,
+# else contextual autonomy). The canned UNBLOCK_MSG was retired 2026-10-05:
+# it ignored what the agent asked and sessions stalled anyway.
 
 # Scope guard (TIM-291): the sweep's candidate list is the WHOLE Jules account
 # session list, but repos.allow (Tim, 25/09) narrows Jules to omarchy-
@@ -91,7 +94,7 @@ act() { # act <verb> <id> ; verb = approve | unblock
   fi
   case "$1" in
     approve) "${DIR}/jules.sh" approve "$2" >/dev/null ;;
-    unblock) "${DIR}/jules.sh" msg "$2" "$UNBLOCK_MSG" >/dev/null ;;
+    unblock) "${DIR}/jules-answer.sh" "$2" >/dev/null ;;
   esac
 }
 
