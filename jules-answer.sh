@@ -21,7 +21,13 @@
 #       directive without the quote (last-resort fallback)
 #
 # Usage: jules-answer.sh <sessionId>
-# Exit 0 = an answer was sent or the plan approved; nonzero = API failure.
+# Exit codes the sweep distinguishes (2026-10-05):
+#   0 = an answer was sent or the plan approved (counts as nudged)
+#   3 = skipped: session state moved on since the sweep's snapshot — no
+#       message sent; NOT a nudge, NOT a failure, next pass re-evaluates
+#       from a fresh session list
+#   1 = API failure (counts as a failed attempt, escalates after 2)
+#   2 = usage error
 set -euo pipefail
 DIR="${JULES_OPS_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 [ $# -eq 1 ] || { echo "usage: jules-answer.sh <sessionId>" >&2; exit 2; }
@@ -40,7 +46,7 @@ if [ "$state" = "AWAITING_PLAN_APPROVAL" ]; then
   exit 0
 fi
 
-[ "$state" = "AWAITING_USER_FEEDBACK" ] || { printf 'skip %s (state %s)\n' "$id" "$state"; exit 0; }
+[ "$state" = AWAITING_USER_FEEDBACK ] || { printf 'skip %s (state %s)\n' "$id" "$state" >&2; exit 3; }
 
 # Last thing the agent SAID — this is the question to answer.
 q="$("${DIR}/jules.sh" activities "$id" 2>/dev/null \
