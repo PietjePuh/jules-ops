@@ -88,13 +88,24 @@ ${msg}"
 fi
 
 act() { # act <verb> <id> ; verb = approve | unblock
+  # Returns 0 acted, 3 stale-skip (unblock only), nonzero failure.
+  # jules-answer's stdout — what was actually sent to the session — lands
+  # in $answer_out for the acted log line: real interaction must be
+  # auditable in the log, not swallowed by /dev/null (Tim, 2026-10-05).
+  answer_out=''
   if [ "${JULES_DRYRUN_ACTIONS:-0}" = "1" ]; then
     printf 'would %s %s\n' "$1" "$2"
     return 0
   fi
   case "$1" in
     approve) "${DIR}/jules.sh" approve "$2" >/dev/null ;;
-    unblock) "${DIR}/jules-answer.sh" "$2" >/dev/null ;;
+    unblock)
+      answer_out="$("${DIR}/jules-answer.sh" "$2" 2>/dev/null)" && return 0
+      rc=$?
+      [ "$rc" -eq 3 ] || return 1
+      answer_out='stale (state moved on, no message sent)'
+      return 3
+      ;;
   esac
 }
 
@@ -231,13 +242,33 @@ while IFS=$'\t' read -r id state updated title; do
   fi
 
   woken=false
-  if act "$verb" "$id"; then
+  act_rc=0
+  act "$verb" "$id" || act_rc=$?
+  if [ "$act_rc" -eq 3 ]; then
+    # Stale snapshot: the session moved on between `jules.sh ls` and the
+    # answer call, so there is no question to answer. Not a nudge, not a
+    # failure: attempts stay untouched so a genuinely-waiting session
+    # later still gets its full two tries (2026-10-05: live proof — the
+    # 11:02Z pass "nudged" 20 sessions that had all self-resolved; every
+    # answer was a silent skip, inflating nudged= to a meaningless count).
+    next_json="$(jq -c --arg i "$id" --arg u "$updated" --arg r "${repo:-}" --argjson a "$attempts" \
+      '.[$i] = ((.[$i] // {}) + {updated: $u, attempts: $a, repo: $r})' <<<"$next_json")"
+    persist_seed
+    continue
+  fi
+  if [ "$act_rc" -eq 0 ]; then
     attempts=$((attempts + 1)); n_acted=$((n_acted + 1))
-    [ "$n_acted" -gt 10 ] || acted+="  ${verb}  ${id}  ${title}"$'\n'
+    [ "$n_acted" -gt 10 ] || acted+="  ${verb}  ${id}  ${title}${answer_out:+  —  ${answer_out}}"$'\n'
     # a COMPLETED session is woken at most once: mark it only after a
     # successful send, so a failed wake retries on the next pass
     [ "$state" != COMPLETED ] || woken=true
   else
+    # A failed send burns an attempt too (2026-10-05): without this bump a
+    # persistently failing session (API error, expired id) retried every
+    # pass forever with attempts frozen at 0, never reaching the 2-strike
+    # cap — silent quota burn the "needs you, 2 attempts spent" report
+    # line never reflected.
+    attempts=$((attempts + 1))
     escalated+="  ${state} (${verb} failed)  ${id}  ${title}"$'\n'
   fi
   next_json="$(jq -c --arg i "$id" --arg u "$updated" --arg r "${repo:-}" --argjson a "$attempts" --argjson w "$woken" \
