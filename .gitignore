@@ -12,3 +12,6 @@ archived-seen.json
 jules-history.jsonl
 dispatch-*.md
 .jules-stalled.lock
+
+# TIM-291: last-good allowlist cache written by jules-stalled.sh at runtime
+.scope/

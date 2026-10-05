@@ -31,6 +31,26 @@ LOG="${DIR}/jules-stalled.log"
 MAX_ATTEMPTS=2
 UNBLOCK_MSG='Pick the single highest-value item from the candidates you listed and implement it now. Do not ask any further questions and do not present options. Run the repository lint and test commands, then open a pull request. If none of the candidates qualifies, stop without opening a pull request.'
 
+# Scope guard (TIM-291): the sweep's candidate list is the WHOLE Jules account
+# session list, but repos.allow (Tim, 25/09) narrows Jules to omarchy-
+# toolbelt, Toolbelt, airplane-sole + rork-cityspot-finder as fallback. The
+# rotator is fail-closed on that list; the stall sweep historically was not,
+# and woke sessions on agentforge/AI/Main/BackgroundRemoval. scope_allow()
+# prints the in-scope repo names (verbatim bare names, like jules.sh) or '*'
+# when the guard is disabled via JULES_SCOPE_OFF=1. An EMPTY output is
+# meaningful and fail-closed: with no verifiable allowlist every candidate
+# classifies out-of-scope and is skipped+recorded, never acted on.
+scope_allow() {
+  "${DIR}/jules-scope-allow.sh"
+}
+SCOPE_OFF=0
+if [ "$(scope_allow | head -1)" = "*" ]; then
+  SCOPE_OFF=1
+  scope_set='*'
+else
+  scope_set="$(scope_allow | grep -v '^$' || true)"
+fi
+
 # Persist seen-state incrementally (TIM-289): the pre-fix loop wrote $SEEN only
 # AFTER the whole walk, so a pass killed by the unit timeout (TimeoutStartSec=
 # 600) lost all progress and every 15-min pass re-walked the same backlog
@@ -97,8 +117,8 @@ session_repo() {
 
 prev_json="$(cat "$SEEN" 2>/dev/null || echo '{}')"
 next_json="$prev_json"
-held=''
-acted='' ; escalated='' ; failed='' ; n_acted=0
+held=''; acted=''; escalated=''; failed=''
+n_acted=0; n_skipped=0; skipped_repos=''
 
 # Per-pass action cap (TIM-289): bound each pass to a slice of the backlog so
 # a pass fits the unit timeout even against a slow API. Capped-out candidates
@@ -148,6 +168,42 @@ while IFS=$'\t' read -r id state updated title; do
     continue
   fi
 
+  # Scope filter (TIM-291): never act on a session whose repo is outside
+  # repos.allow. Placement is deliberate: AFTER the #19 cap branch (capped-out
+  # candidates must not pay a repo round-trip) and BEFORE the woken-once /
+  # act paths (an out-of-scope COMPLETED session must not even get its single
+  # wake). A cached repo classifies with no API call; a cache miss pays one
+  # session_repo() here for candidates that reach this line. The skip is
+  # recorded like any other terminal disposition, and the entry keeps
+  # woken/escalated so a guard disable+re-enable never re-wakes a completed
+  # session the guard once skipped.
+  if [ "$SCOPE_OFF" = "0" ]; then
+    cached_repo="$(jq -r --arg i "$id" '.[$i].repo // ""' <<<"$prev_json")"
+    if [ -n "$cached_repo" ]; then
+      repo="$cached_repo"
+    else
+      repo="$(session_repo "$id")"
+    fi
+    in_scope=0
+    if [ -n "$repo" ] && [ -n "$scope_set" ] \
+       && grep -qxF -- "$repo" <<<"$scope_set"; then
+      in_scope=1
+    fi
+    if [ "$in_scope" = "0" ]; then
+      prev_w="$(jq -r '.woken // false' <<<"$prev")"
+      prev_e="$(jq -r '.escalated // false' <<<"$prev")"
+      next_json="$(jq -c --arg i "$id" --arg u "$updated" --arg r "${repo:-}" \
+        --argjson a "$attempts" --argjson w "$prev_w" --argjson e "$prev_e" \
+        '.[$i] = {updated: $u, attempts: $a, repo: $r, skipped: "out_of_scope"}
+                 + (if $w then {woken: true} else {} end)
+                 + (if $e then {escalated: true} else {} end)' <<<"$next_json")"
+      persist_seed
+      n_skipped=$((n_skipped + 1))
+      [ "$n_skipped" -gt 10 ] || skipped_repos+="${repo:-<unknown>}"$'\n'
+      continue
+    fi
+  fi
+
   repo="$(session_repo "$id")"
   # NOTE: nudging/approving an ALREADY-RUNNING stalled session is exempt from
   # MAX_OPEN_PRS (Tim, 2026-09-25, TIM-46) — the session's own PR, if any,
@@ -188,9 +244,15 @@ done <<<"$sessions"
 
 printf '%s\n' "$next_json" >"$SEEN"
 
+if [ "$n_skipped" -gt 0 ]; then
+  uniq_repos="$(sort -u <<<"$skipped_repos" | grep -v '^$' | tr '\n' ',' | sed 's/,$//')"
+  printf '[%s] skipped %d out-of-scope candidate(s) (repos.allow filter, TIM-291): %s\n' \
+    "$stamp" "$n_skipped" "$uniq_repos" >>"$LOG"
+fi
+
 [ -n "${acted}${escalated}${failed}${held}" ] || {
   printf '[%s] nothing stalled beyond %sh\n' "$stamp" "$HOURS" >>"$LOG"
-  printf 'nudged=0 escalated=0 failed=0\n'
+  printf 'nudged=0 escalated=0 failed=0 skipped=%s\n' "$n_skipped"
   exit 0
 }
 
@@ -206,5 +268,6 @@ notify ":hourglass_flowing_sand: Jules stalled-session sweep (${stamp}):
 ${body}"
 # Single machine-readable result line on stdout — the caller-facing contract
 # (autopilot log capture, MCP wrapper). Detail lives in the log and Slack.
-printf 'nudged=%s escalated=%s failed=%s\n' \
-  "$n_acted" "$(grep -c . <<<"$escalated" || true)" "$(grep -c . <<<"$failed" || true)"
+printf 'nudged=%s escalated=%s failed=%s skipped=%s\n' \
+  "$n_acted" "$(grep -c . <<<"$escalated" || true)" "$(grep -c . <<<"$failed" || true)" \
+  "$n_skipped"
