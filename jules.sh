@@ -29,14 +29,19 @@ command -v jq >/dev/null || { echo "jules: jq is required" >&2; exit 2; }
 api() {
   local method="$1" path="$2" body="${3:-}" code tmp out
   tmp="$(mktemp)"
+  # --max-time 60: a degraded/hung Jules API must fail the call, not pin the
+  # caller for the systemd TimeoutStartSec (600s) — a pre-fix pass walked a
+  # 455-session backlog against a hung API and every 15-min unit run hit the
+  # timeout with zero progress (TIM-289). One slow call failing fast lets the
+  # sweep degrade to "this candidate failed" instead of "the pass never ran".
   if [ -n "$body" ]; then
-    code="$(curl -sS -o "$tmp" -w '%{http_code}' -X "$method" \
-      -K <(printf 'header = "x-goog-api-key: %s"\n' "$JULES_API_KEY") \
+    code="$(curl -sS --max-time 60 -o "$tmp" -w '%{http_code}' -X "$method" \
+      -K <(printf 'header = "x-goog-api-key: %s"' "$JULES_API_KEY") \
       -H 'Content-Type: application/json' \
       -d "$body" "${BASE}${path}")"
   else
-    code="$(curl -sS -o "$tmp" -w '%{http_code}' -X "$method" \
-      -K <(printf 'header = "x-goog-api-key: %s"\n' "$JULES_API_KEY") "${BASE}${path}")"
+    code="$(curl -sS --max-time 60 -o "$tmp" -w '%{http_code}' -X "$method" \
+      -K <(printf 'header = "x-goog-api-key: %s"' "$JULES_API_KEY") "${BASE}${path}")"
   fi
   out="$(cat "$tmp")"
   rm -f "$tmp"
