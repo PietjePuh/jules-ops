@@ -86,6 +86,25 @@ open_prs() {
   "${DIR}/jules-prs.sh" list "$1" 2>/dev/null | awk '{for(f=1;f<=NF;f++) if ($f ~ /^open=/) {sub(/^open=/,"",$f); print $f}}'
 }
 
+# TIM-297 (06/10/2026): backpressure (open_prs, above) caps how much unreviewed
+# work piles up, but it never stopped a repo from getting the SAME topic over
+# and over once PRs drained below the ceiling -- live proof: rork-cityspot-
+# finder got 87 "Palette" session starts for only 33 resulting PRs (any
+# state), the rest churned re-discovering accessibility/focus-state issues
+# already fixed in an earlier pass, because the prompt carries zero memory of
+# prior sessions. Pull the persona's recent PR titles on this repo (any
+# state, cheap read-only gh call) and hand them to the agent as "already
+# addressed" context so it is steered toward a genuinely different file or
+# issue category instead of re-finding the same class of fix.
+recent_topics() {
+  local repo="$1" persona="$2" cap
+  cap="$(tr '[:lower:]' '[:upper:]' <<<"${persona:0:1}")${persona:1}"
+  gh pr list --repo "${OWNER}/${repo}" --state all --search "author:app/google-labs-jules" \
+    --limit 60 --json title 2>/dev/null \
+    | jq -r --arg p "$cap" '.[] | select(.title | test($p)) | .title' \
+    | head -12
+}
+
 started=()
 skipped=''
 failed=''
@@ -94,7 +113,7 @@ done_repos=''
 # try_start <repo> <pr_ceiling> -> 0 if a session was started, 1 otherwise.
 # Advances the shared persona cursor and daily budget on success.
 try_start() {
-  local repo="$1" ceiling="$2" n_prs persona prompt out
+  local repo="$1" ceiling="$2" n_prs persona prompt out avoid
   if grep -qxF "$repo" <<<"$busy_repos" || grep -qxF "$repo" <<<"$done_repos"; then
     skipped+="${repo}(session) "
     return 1
@@ -108,6 +127,16 @@ try_start() {
   persona="${PERSONAS[$((p % ${#PERSONAS[@]}))]}"
   p=$((p + 1))
   prompt="$(cat "${DIR}/prompts/${persona}.md")"
+
+  avoid="$(recent_topics "$repo" "$persona")"
+  if [ -n "$avoid" ]; then
+    prompt="${prompt}
+
+## Already addressed on this repo in earlier sessions — do NOT repeat or pick a near-duplicate of these (same file, same category of issue):
+${avoid}
+
+Pick a genuinely different file or a different category of issue. If nothing new qualifies, stop without opening a pull request."
+  fi
 
   if out="$("${DIR}/jules.sh" new "${OWNER}/${repo}" "$prompt" \
             --title "${persona^}: ${repo}" --auto-pr 2>&1)"; then
