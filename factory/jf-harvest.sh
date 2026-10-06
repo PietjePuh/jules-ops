@@ -47,6 +47,13 @@ while IFS="$(printf '\t')" read -r repo issue last_action; do
     if [ -n "$session_id" ]; then
       state=$(curl -sS -m 20 -H "X-Goog-Api-Key: $(jf_api_key)" "$JULES_API/$session_id" \
         | python3 -c 'import json,sys; print(json.load(sys.stdin).get("state",""))' 2>/dev/null || echo "")
+      # A 404 means the session was DELETED (externally swept, or by Tim
+      # resolving the work outside the factory). Treat as terminal, not as
+      # "unknown" -- otherwise the key clogs a live slot forever.
+      if [ -z "$state" ]; then
+        http=$(curl -sS -m 20 -o /dev/null -w '%{http_code}' -H "X-Goog-Api-Key: $(jf_api_key)" "$JULES_API/$session_id")
+        [ "$http" = "404" ] && state="DELETED"
+      fi
       case "$state" in
         AWAITING_USER_FEEDBACK)
           # Session wants input. Two flavors: pending plan (approvePlan
@@ -76,7 +83,7 @@ r = subprocess.run(['curl','-sS','-m','30','-X','POST',
             jf_log "harvest: APPROVED repo=$repo issue=$issue session=${session_id##*/}"
           fi
           ;;
-        FAILED|COMPLETED)
+        FAILED|COMPLETED|DELETED)
           jf_ledger_append "$repo" "$issue" "failed" "\"detail\":\"no PR, session state $state\""
           jf_log "harvest: FAILED repo=$repo issue=$issue (session terminal, no PR)"
           n_failed=$((n_failed + 1))
