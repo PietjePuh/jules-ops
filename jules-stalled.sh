@@ -146,13 +146,24 @@ while IFS=$'\t' read -r id state updated title; do
 
   prev="$(jq -c --arg i "$id" '.[$i] // {}' <<<"$prev_json")"
   prev_updated="$(jq -r '.updated // ""' <<<"$prev")"
+  prev_state="$(jq -r '.state // ""' <<<"$prev")"
   attempts="$(jq -r '.attempts // 0' <<<"$prev")"
-  [ "$prev_updated" = "$updated" ] || attempts=0   # session moved, start over
+  # TIM-296 (06/10/2026): was keyed on updateTime ([ "$prev_updated" = "$updated" ]),
+  # but OUR OWN unblock message bumps the session's updateTime every pass, so
+  # attempts reset to 0 before ever reaching MAX_ATTEMPTS -- a session stuck in
+  # the same stalled state got the identical canned nudge forever and never
+  # escalated (live proof 05/10: session 2814833911976743175 nudged at 17:07
+  # and again at 19:07, two hours apart, both "quoted question -> autonomy",
+  # attempts never ticking past 1). Key on state instead: a session that
+  # cycles through RUNNING is filtered out of candidacy while running (case
+  # statement above), so reappearing here still AWAITING_* means it is still
+  # the same unresolved ask, not a fresh one.
+  [ "$prev_state" = "$state" ] || attempts=0   # state actually changed, start over
 
   if [ "$state" = FAILED ]; then
     [ "$prev_updated" = "$updated" ] || failed+="  FAILED  ${id}  ${title}"$'\n'
-    next_json="$(jq -c --arg i "$id" --arg u "$updated" \
-      '.[$i] = {updated: $u, attempts: 0}' <<<"$next_json")"
+    next_json="$(jq -c --arg i "$id" --arg u "$updated" --arg st "$state" \
+      '.[$i] = {updated: $u, state: $st, attempts: 0}' <<<"$next_json")"
     persist_seed
     continue
   fi
@@ -160,8 +171,8 @@ while IFS=$'\t' read -r id state updated title; do
   if [ "$attempts" -ge "$MAX_ATTEMPTS" ]; then
     [ "$(jq -r '.escalated // false' <<<"$prev")" = true ] \
       || escalated+="  ${state}  ${id}  ${title}"$'\n'
-    next_json="$(jq -c --arg i "$id" --arg u "$updated" --argjson a "$attempts" \
-      '.[$i] = {updated: $u, attempts: $a, escalated: true}' <<<"$next_json")"
+    next_json="$(jq -c --arg i "$id" --arg u "$updated" --arg st "$state" --argjson a "$attempts" \
+      '.[$i] = {updated: $u, state: $st, attempts: $a, escalated: true}' <<<"$next_json")"
     persist_seed
     continue
   fi
@@ -176,8 +187,8 @@ while IFS=$'\t' read -r id state updated title; do
   # woken/escalated/repo already on the entry; repo is fetched only for
   # candidates actually acted on or held this pass.
   if [ "$n_acted" -ge "$MAX_ACTIONS" ]; then
-    next_json="$(jq -c --arg i "$id" --arg u "$updated" --argjson a "$attempts" \
-      '.[$i] = ((.[$i] // {}) + {updated: $u, attempts: $a})' <<<"$next_json")"
+    next_json="$(jq -c --arg i "$id" --arg u "$updated" --arg st "$state" --argjson a "$attempts" \
+      '.[$i] = ((.[$i] // {}) + {updated: $u, state: $st, attempts: $a})' <<<"$next_json")"
     persist_seed
     continue
   fi
@@ -206,9 +217,9 @@ while IFS=$'\t' read -r id state updated title; do
     if [ "$in_scope" = "0" ]; then
       prev_w="$(jq -r '.woken // false' <<<"$prev")"
       prev_e="$(jq -r '.escalated // false' <<<"$prev")"
-      next_json="$(jq -c --arg i "$id" --arg u "$updated" --arg r "${repo:-}" \
+      next_json="$(jq -c --arg i "$id" --arg u "$updated" --arg st "$state" --arg r "${repo:-}" \
         --argjson a "$attempts" --argjson w "$prev_w" --argjson e "$prev_e" \
-        '.[$i] = {updated: $u, attempts: $a, repo: $r, skipped: "out_of_scope"}
+        '.[$i] = {updated: $u, state: $st, attempts: $a, repo: $r, skipped: "out_of_scope"}
                  + (if $w then {woken: true} else {} end)
                  + (if $e then {escalated: true} else {} end)' <<<"$next_json")"
       persist_seed
@@ -234,9 +245,9 @@ while IFS=$'\t' read -r id state updated title; do
     # new message as a NEW task, so re-waking on every pass would turn this
     # sweep into a work generator. The woken flag is written by the tail state
     # update below and deliberately survives updateTime changes.
-    next_json="$(jq -c --arg i "$id" --arg u "$updated" \
+    next_json="$(jq -c --arg i "$id" --arg u "$updated" --arg st "$state" \
       --arg r "$(jq -r '.repo // ""' <<<"$prev")" --argjson a "$attempts" \
-      '.[$i] = {updated: $u, attempts: $a, repo: $r, woken: true}' <<<"$next_json")"
+      '.[$i] = {updated: $u, state: $st, attempts: $a, repo: $r, woken: true}' <<<"$next_json")"
     persist_seed
     continue
   fi
@@ -251,8 +262,8 @@ while IFS=$'\t' read -r id state updated title; do
     # later still gets its full two tries (2026-10-05: live proof — the
     # 11:02Z pass "nudged" 20 sessions that had all self-resolved; every
     # answer was a silent skip, inflating nudged= to a meaningless count).
-    next_json="$(jq -c --arg i "$id" --arg u "$updated" --arg r "${repo:-}" --argjson a "$attempts" \
-      '.[$i] = ((.[$i] // {}) + {updated: $u, attempts: $a, repo: $r})' <<<"$next_json")"
+    next_json="$(jq -c --arg i "$id" --arg u "$updated" --arg st "$state" --arg r "${repo:-}" --argjson a "$attempts" \
+      '.[$i] = ((.[$i] // {}) + {updated: $u, state: $st, attempts: $a, repo: $r})' <<<"$next_json")"
     persist_seed
     continue
   fi
@@ -271,8 +282,8 @@ while IFS=$'\t' read -r id state updated title; do
     attempts=$((attempts + 1))
     escalated+="  ${state} (${verb} failed)  ${id}  ${title}"$'\n'
   fi
-  next_json="$(jq -c --arg i "$id" --arg u "$updated" --arg r "${repo:-}" --argjson a "$attempts" --argjson w "$woken" \
-    '.[$i] = {updated: $u, attempts: $a, repo: $r} + (if $w then {woken: true} else {} end)' <<<"$next_json")"
+  next_json="$(jq -c --arg i "$id" --arg u "$updated" --arg st "$state" --arg r "${repo:-}" --argjson a "$attempts" --argjson w "$woken" \
+    '.[$i] = {updated: $u, state: $st, attempts: $a, repo: $r} + (if $w then {woken: true} else {} end)' <<<"$next_json")"
   persist_seed
 done <<<"$sessions"
 
